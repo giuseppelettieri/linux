@@ -420,10 +420,13 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 	skb_queue_tail(&tun->socket.sk->sk_receive_queue, skb);
 
 	/* Notify and wake up reader process */
-	if (tun->flags & TUN_FASYNC)
-		kill_fasync(&tun->fasync, SIGIO, POLL_IN);
-	wake_up_interruptible_poll(&tun->wq.wait, POLLIN |
-				   POLLRDNORM | POLLRDBAND);
+	if (!(skb_shinfo(skb)->tx_flags & SKBTX_MULTIFRAME_MORE)) {
+		if (tun->flags & TUN_FASYNC)
+			kill_fasync(&tun->fasync, SIGIO, POLL_IN);
+		wake_up_interruptible_poll(&tun->wq.wait, POLLIN |
+ 				   POLLRDNORM | POLLRDBAND);
+	}
+
 	return NETDEV_TX_OK;
 
 drop:
@@ -621,6 +624,7 @@ static ssize_t tun_get_user(struct tun_struct *tun,
 	}
 
 	if (tun->flags & TUN_VNET_HDR) {
+		//printk(KERN_INFO "TUN_VNET_HDR set %d\n", tun->vnet_hdr_sz);
 		if ((len -= tun->vnet_hdr_sz) > count)
 			return -EINVAL;
 
@@ -732,20 +736,111 @@ static ssize_t tun_get_user(struct tun_struct *tun,
 	return count;
 }
 
+/* Get many packets from user space buffer */
+static ssize_t tun_get_user_multiframe(struct tun_struct *tun, 
+					void *msg_control,
+					const struct iovec *iv,
+					 size_t count, int noblock)
+{
+	size_t total_len = 0;
+	//struct tun_pi pi = { 0, cpu_to_be16(ETH_P_IP) };
+	struct sk_buff *skb;
+	size_t len, align = NET_SKB_PAD;
+	struct virtio_net_hdr *gsop = NULL;
+	bool zerocopy = false;
+	int i;
+	
+	//printk("[TAP] multiframe aio_write\n");
+
+	i = 0;
+	if (tun->flags & TUN_VNET_HDR) {
+		//printk("[TAP] TUN_VNET_HDR is set %d\n", tun->vnet_hdr_sz);
+		/* ci aspettiamo che il primo elemento dell'iovec sia il
+		 * vnet_header, e che sia tutto a zero, ossia disattivato */
+		if ( iv[0].iov_len != sizeof(struct virtio_net_hdr) )
+		{
+			printk(KERN_INFO "[TAP multi-frame error] First iovec buffer is not the vnet_header\n");
+			return -EINVAL;
+		}
+		gsop = (struct virtio_net_hdr *)iv[0].iov_base;
+		if (gsop->gso_type != VIRTIO_NET_HDR_GSO_NONE)
+		{
+			printk(KERN_INFO "[TAP multi-frame error] First iovec buffer is not zero\n");
+			return -EINVAL;
+		}
+		total_len += sizeof(struct virtio_net_hdr);
+		i++;
+	}
+	
+	if ((tun->flags & TUN_TYPE_MASK) == TUN_TAP_DEV) {	
+		align += NET_IP_ALIGN;
+	}
+
+	if (msg_control)
+	{
+		zerocopy = true;
+		printk(KERN_INFO "[TAP multi-frame error] zerocopy is not supported");
+		return -EINVAL;
+	}
+
+	for (; i<count; i++)
+	{
+		//printk("processing %d %d\n", i, (int)iv[i].iov_len);
+		len = iv[i].iov_len;
+
+		skb = tun_alloc_skb(tun, align, len, 0, noblock);
+		if (IS_ERR(skb)) {
+			if (PTR_ERR(skb) != -EAGAIN)
+				tun->dev->stats.rx_dropped++;
+			return PTR_ERR(skb);
+		}
+
+		//err = skb_copy_datagram_from_iovec(skb, 0, iv, offset, len);
+		if(copy_from_user(skb->data, iv[i].iov_base, len))
+		{
+			tun->dev->stats.rx_dropped++;
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+
+		skb->protocol = eth_type_trans(skb, tun->dev);
+
+		if (i != count-1)
+			skb_shinfo(skb)->tx_flags |= SKBTX_MULTIFRAME_MORE;
+
+		netif_rx_ni(skb);
+
+		tun->dev->stats.rx_packets++;
+		tun->dev->stats.rx_bytes += len;
+		total_len += len;
+	}
+	return total_len;
+}
+
 static ssize_t tun_chr_aio_write(struct kiocb *iocb, const struct iovec *iv,
 			      unsigned long count, loff_t pos)
 {
 	struct file *file = iocb->ki_filp;
 	struct tun_struct *tun = tun_get(file);
 	ssize_t result;
-
+	//char * hh;
+ 
+	/*printk(KERN_INFO "aio_write cnt=%lu\n", count);
+	for (result=0; result<count; result++)
+		printk(KERN_INFO "len(iov[%d]) = %d\n", (int)result, (int)iv[result].iov_len);
+*/
+	/*hh = iv[0].iov_base;
+	if (iv[0].iov_len == 10)
+		printk(KERN_INFO "%x%x%x%x%x%x%x%x%x%x\n", hh[0], hh[1], hh[2], hh[3], hh[4], hh[5], hh[6], hh[7], hh[8], hh[9]); */
 	if (!tun)
 		return -EBADFD;
 
 	tun_debug(KERN_INFO, tun, "tun_chr_write %ld\n", count);
 
-	result = tun_get_user(tun, iv, iov_length(iv, count),
-			      file->f_flags & O_NONBLOCK);
+	if (tun->flags & TUN_MULTI_FRAME)
+		result = tun_get_user_multiframe(tun, NULL, iv, count, file->f_flags & O_NONBLOCK);
+	else
+		result = tun_get_user(tun, iv, iov_length(iv, count), file->f_flags & O_NONBLOCK);
 
 	tun_put(tun);
 	return result;
@@ -821,6 +916,16 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 		total += tun->vnet_hdr_sz;
 	}
 
+	if (tun->flags & TUN_MULTI_FRAME)
+	{	
+		uint16_t frame_size = skb->len;
+		len -= sizeof(frame_size);
+		//TODO skb_len = cpu_to_le(skb_len) for heterogeneus multiprocessors systems
+		if(unlikely(copy_to_user(iv->iov_base + total, (void*)&frame_size, sizeof(frame_size))))
+			return -EFAULT;
+		total += sizeof(frame_size);
+	}
+
 	len = min_t(int, skb->len, len);
 
 	skb_copy_datagram_const_iovec(skb, 0, iv, total, len);
@@ -880,6 +985,121 @@ static ssize_t tun_do_read(struct tun_struct *tun,
 	return ret;
 }
 
+static int qulen = 0;
+static int rc = 0;
+static int rcpr = 64;
+static int jstart;
+static int jend;
+
+static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
+			   struct kiocb *iocb, const struct iovec *iv,
+			   unsigned long count, int noblock)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	struct sk_buff *skb;
+	ssize_t ret;
+	ssize_t total = 0;
+	int i = 0;
+	size_t len;
+	unsigned long flags = 0;
+
+	tun_debug(KERN_INFO, tun, "tun_chr_read\n");
+
+	//printk("readv %d\n", count);
+	len = iv[0].iov_len;
+	if (unlikely(!noblock))
+		add_wait_queue(&tun->wq.wait, &wait);
+	while (len) {
+		current->state = TASK_INTERRUPTIBLE;
+
+		/* Read frames from the queue */
+		//spin_lock_irqsave(&(tun->socket.sk->sk_receive_queue.lock), flags);
+		if (!(skb=skb_dequeue(&tun->socket.sk->sk_receive_queue))) {
+			if (noblock) {
+				total = -EAGAIN;
+				goto out;
+			}
+			if (signal_pending(current)) {
+				total = -ERESTARTSYS;
+				goto out;
+			}
+			if (tun->dev->reg_state != NETREG_REGISTERED) {
+				total = -EIO;
+				goto out;
+			}
+
+			/* Nothing to read, let's sleep */
+			//spin_unlock_irqrestore(&(tun->socket.sk->sk_receive_queue.lock), flags);
+			flags = 0;
+			schedule();
+			continue;
+		}
+		
+		//netif_wake_queue(tun->dev);  // WAS HERE!!
+
+		if (len < skb->len) {  // FIXME move this check in tun_put_user
+			kfree_skb(skb);
+			total = -EINVAL;
+			goto out;
+		}
+		else {
+			ret = tun_put_user(tun, skb, iv, len);
+			total += ret;
+		}
+		kfree_skb(skb);
+		i++;
+		break;
+	}
+
+	qulen += skb_queue_len(&tun->socket.sk->sk_receive_queue) + 1;
+	rc++;
+
+	while (i < count) 
+	{
+		skb = skb_dequeue(&tun->socket.sk->sk_receive_queue);
+		if (!skb)
+			break;
+		len = iv[i].iov_len;
+		if (len < skb->len) {
+			kfree_skb(skb);
+			total = -EINVAL;
+			goto out;
+		}
+		ret = tun_put_user(tun, skb, &iv[i], len);
+		if (ret < 0) {
+			kfree_skb(skb);
+			total = ret;
+			goto out;
+		}
+		total += ret;
+		kfree_skb(skb);
+		i++;
+	}
+
+out:
+	//spin_unlock_irqrestore(&(tun->socket.sk->sk_receive_queue.lock), flags);
+	netif_wake_queue(tun->dev);
+
+	current->state = TASK_RUNNING;
+	if (unlikely(!noblock))
+		remove_wait_queue(&tun->wq.wait, &wait);
+	
+	if (rc == rcpr)
+	{
+		printk("[TAP] sock rx queue avg len = %d\n", qulen/rc);
+		qulen = 0;
+		rc = 0;
+		jend = jiffies;
+		if (jend-jstart < 400)
+			rcpr <<= 1;
+		else if(jend-jstart > 800 && rcpr > 1)
+			rcpr >>= 1;
+		jstart = jend;
+	}
+	return total;
+	
+}
+
 static ssize_t tun_chr_aio_read(struct kiocb *iocb, const struct iovec *iv,
 			    unsigned long count, loff_t pos)
 {
@@ -888,6 +1108,16 @@ static ssize_t tun_chr_aio_read(struct kiocb *iocb, const struct iovec *iv,
 	struct tun_struct *tun = __tun_get(tfile);
 	ssize_t len, ret;
 
+	/*printk("aio_read cnt=%d\n", (int) count);*/
+	/*for (ret=0; ret<count; ret++)
+		printk(KERN_INFO "len(iov[%d]) = %d\n", (int)ret, (int)iv[ret].iov_len); */
+	/*if (tun->flags & TUN_MULTI_FRAME) {
+		if (tun->flags & TUN_VNET_HDR) {
+			printk("TUN_VNET_HDR not supported\n");
+			ret = -EINVAL;
+			goto out;
+		}
+	}*/
 	if (!tun)
 		return -EBADFD;
 	len = iov_length(iv, count);
@@ -896,7 +1126,10 @@ static ssize_t tun_chr_aio_read(struct kiocb *iocb, const struct iovec *iv,
 		goto out;
 	}
 
-	ret = tun_do_read(tun, iocb, iv, len, file->f_flags & O_NONBLOCK);
+	if (tun->flags & TUN_MULTI_FRAME)
+		ret = tun_do_read_multiframe(tun, iocb, iv, count, file->f_flags & O_NONBLOCK);
+	else
+		ret = tun_do_read(tun, iocb, iv, len, file->f_flags & O_NONBLOCK);
 	ret = min_t(ssize_t, ret, len);
 out:
 	tun_put(tun);
@@ -1430,6 +1663,20 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV)
 			break;
 		ret = sk_detach_filter(tun->socket.sk);
+		break;
+
+	case TUNSETMULTIFRAMEMODE:
+		/* Can be set only for TAPs, and only if TUN_NO_PI is set */
+		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV || (tun->flags & TUN_NO_PI) == 0)
+		{
+			ret = -EINVAL;
+			break;
+		}
+		printk(KERN_INFO "ioctl(TUNSETMULTIFRAMEMODE, %lu)\n", arg);
+		if (arg)
+			tun->flags |= TUN_MULTI_FRAME;
+		else
+			tun->flags &= ~TUN_MULTI_FRAME;
 		break;
 
 	default:

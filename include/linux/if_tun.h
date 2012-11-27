@@ -21,7 +21,7 @@
 #include <linux/filter.h>
 
 /* Read queue size */
-#define TUN_READQ_SIZE	500
+#define TUN_READQ_SIZE	4096
 
 /* TUN device flags */
 #define TUN_TUN_DEV 	0x0001	
@@ -34,6 +34,7 @@
 #define TUN_ONE_QUEUE	0x0080
 #define TUN_PERSIST 	0x0100	
 #define TUN_VNET_HDR 	0x0200
+#define TUN_MULTI_FRAME 0x0400
 
 /* Ioctl defines */
 #define TUNSETNOCSUM  _IOW('T', 200, int) 
@@ -53,6 +54,7 @@
 #define TUNDETACHFILTER _IOW('T', 214, struct sock_fprog)
 #define TUNGETVNETHDRSZ _IOR('T', 215, int)
 #define TUNSETVNETHDRSZ _IOW('T', 216, int)
+#define TUNSETMULTIFRAMEMODE _IOW('T', 217, int)  /* (NEW) Tap Multi-frame mode */
 
 /* TUNSETIFF ifr flags */
 #define IFF_TUN		0x0001
