@@ -230,6 +230,9 @@ enum {
 
 	/* generate wifi status information (where possible) */
 	SKBTX_WIFI_STATUS = 1 << 4,
+	
+	/* the packet stored is not the last one in a batch of packets */
+	SKBTX_MULTIFRAME_MORE = 1 << 5,
 };
 
 /*
