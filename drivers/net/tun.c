@@ -711,7 +711,6 @@ static ssize_t tun_get_user(struct tun_struct *tun, void *msg_control,
 	}
 
 	if (tun->flags & TUN_VNET_HDR) {
-		//printk(KERN_INFO "TUN_VNET_HDR set %d\n", tun->vnet_hdr_sz);
 		if ((len -= tun->vnet_hdr_sz) > total_len)
 			return -EINVAL;
 
@@ -871,35 +870,10 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun,
 	//struct tun_pi pi = { 0, cpu_to_be16(ETH_P_IP) };
 	struct sk_buff *skb;
 	size_t len, align = NET_SKB_PAD;
-	struct virtio_net_hdr *gsop = NULL;
 	bool zerocopy = false;
 	int i;
 	
-	//printk("[TAP] multiframe aio_write\n");
-
-	i = 0;
-	if (tun->flags & TUN_VNET_HDR) {
-		//printk("[TAP] TUN_VNET_HDR is set %d\n", tun->vnet_hdr_sz);
-		/* ci aspettiamo che il primo elemento dell'iovec sia il
-		 * vnet_header, e che sia tutto a zero, ossia disattivato */
-		if ( iv[0].iov_len != sizeof(struct virtio_net_hdr) )
-		{
-			printk(KERN_INFO "[TAP multi-frame error] First iovec buffer is not the vnet_header\n");
-			return -EINVAL;
-		}
-		gsop = (struct virtio_net_hdr *)iv[0].iov_base;
-		if (gsop->gso_type != VIRTIO_NET_HDR_GSO_NONE)
-		{
-			printk(KERN_INFO "[TAP multi-frame error] First iovec buffer is not zero\n");
-			return -EINVAL;
-		}
-		total_len += sizeof(struct virtio_net_hdr);
-		i++;
-	}
-	
-	if ((tun->flags & TUN_TYPE_MASK) == TUN_TAP_DEV) {	
-		align += NET_IP_ALIGN;
-	}
+	align += NET_IP_ALIGN; //if ((tun->flags & TUN_TYPE_MASK) == TUN_TAP_DEV)
 
 	if (msg_control)
 	{
@@ -908,9 +882,8 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun,
 		return -EINVAL;
 	}
 
-	for (; i<count; i++)
+	for (i=0; i<count; i++)
 	{
-		//printk("processing %d %d\n", i, (int)iv[i].iov_len);
 		len = iv[i].iov_len;
 
 		skb = tun_alloc_skb(tun, align, len, 0, noblock);
@@ -948,15 +921,7 @@ static ssize_t tun_chr_aio_write(struct kiocb *iocb, const struct iovec *iv,
 	struct file *file = iocb->ki_filp;
 	struct tun_struct *tun = tun_get(file);
 	ssize_t result;
-	//char * hh;
- 
-	/*printk(KERN_INFO "aio_write cnt=%lu\n", count);
-	for (result=0; result<count; result++)
-		printk(KERN_INFO "len(iov[%d]) = %d\n", (int)result, (int)iv[result].iov_len);
-*/
-	/*hh = iv[0].iov_base;
-	if (iv[0].iov_len == 10)
-		printk(KERN_INFO "%x%x%x%x%x%x%x%x%x%x\n", hh[0], hh[1], hh[2], hh[3], hh[4], hh[5], hh[6], hh[7], hh[8], hh[9]); */
+	
 	if (!tun)
 		return -EBADFD;
 
@@ -1130,7 +1095,6 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 
 	tun_debug(KERN_INFO, tun, "tun_chr_read\n");
 
-	//printk("readv %d\n", count);
 	len = iv[0].iov_len;
 	if (unlikely(!noblock))
 		add_wait_queue(&tun->wq.wait, &wait);
@@ -1138,7 +1102,6 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 		current->state = TASK_INTERRUPTIBLE;
 
 		/* Read frames from the queue */
-		//spin_lock_irqsave(&(tun->socket.sk->sk_receive_queue.lock), flags);
 		if (!(skb=skb_dequeue(&tun->socket.sk->sk_receive_queue))) {
 			if (noblock) {
 				total = -EAGAIN;
@@ -1154,13 +1117,11 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 			}
 
 			/* Nothing to read, let's sleep */
-			//spin_unlock_irqrestore(&(tun->socket.sk->sk_receive_queue.lock), flags);
 			flags = 0;
 			schedule();
 			continue;
 		}
 		
-		//netif_wake_queue(tun->dev);  // WAS HERE!!
 
 		if (len < skb->len) {  // FIXME move this check in tun_put_user
 			kfree_skb(skb);
@@ -1202,7 +1163,6 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 	}
 
 out:
-	//spin_unlock_irqrestore(&(tun->socket.sk->sk_receive_queue.lock), flags);
 	netif_wake_queue(tun->dev);
 
 	current->state = TASK_RUNNING;
@@ -1211,7 +1171,7 @@ out:
 	
 	if (rc == rcpr)
 	{
-		printk("[TAP] sock rx queue avg len = %d\n", qulen/rc);
+		printk(KERN_INFO "[TAP] sock rx queue avg len = %d\n", qulen/rc);
 		qulen = 0;
 		rc = 0;
 		jend = jiffies;
@@ -1233,16 +1193,6 @@ static ssize_t tun_chr_aio_read(struct kiocb *iocb, const struct iovec *iv,
 	struct tun_struct *tun = __tun_get(tfile);
 	ssize_t len, ret;
 
-	/*printk("aio_read cnt=%d\n", (int) count);*/
-	/*for (ret=0; ret<count; ret++)
-		printk(KERN_INFO "len(iov[%d]) = %d\n", (int)ret, (int)iv[ret].iov_len); */
-	/*if (tun->flags & TUN_MULTI_FRAME) {
-		if (tun->flags & TUN_VNET_HDR) {
-			printk("TUN_VNET_HDR not supported\n");
-			ret = -EINVAL;
-			goto out;
-		}
-	}*/
 	if (!tun)
 		return -EBADFD;
 	len = iov_length(iv, count);
@@ -1814,7 +1764,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 
 	case TUNSETMULTIFRAMEMODE:
 		/* Can be set only for TAPs, and only if TUN_NO_PI is set */
-		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV || (tun->flags & TUN_NO_PI) == 0)
+		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV || !(tun->flags & TUN_NO_PI) || (tun->flags & TUN_VNET_HDR))
 		{
 			ret = -EINVAL;
 			break;
