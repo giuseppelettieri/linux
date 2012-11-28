@@ -128,7 +128,7 @@ struct e1000_adapter;
 /* How many Tx Descriptors do we need to call netif_wake_queue ? */
 #define E1000_TX_QUEUE_WAKE	16
 /* How many Rx Buffers do we bundle into one write to the hardware ? */
-#define E1000_RX_BUFFER_WRITE	16	/* Must be power of 2 */
+#define E1000_RX_BUFFER_WRITE	512	/* Must be power of 2 */
 
 #define AUTO_ALL_MODES            0
 #define E1000_EEPROM_82544_APM    0x0004

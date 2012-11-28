@@ -33,6 +33,13 @@
 #include <linux/bitops.h>
 #include <linux/if_vlan.h>
 
+#define TRACE_RINGS
+#ifdef TRACE_RINGS
+#include <linux/cdev.h>
+#include <linux/semaphore.h>
+#include <linux/spinlock.h>
+#endif
+
 char e1000_driver_name[] = "e1000";
 static char e1000_driver_string[] = "Intel(R) PRO/1000 Network Driver";
 #define DRV_VERSION "7.3.21-k8-NAPI"
@@ -222,6 +229,90 @@ static int debug = -1;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,...,16=all)");
 
+#define TDT_BATCHING
+#ifdef TDT_BATCHING
+static int software_tdt = 0; /* coherent software copy of the TDT register: used to read the TDT value without accessing the real TDT */
+static spinlock_t reg_write_lock; /* lock used to atomically access the TDT register and its software copy */
+static unsigned int shadow_ntu = 0; 
+static int pending = 0; 
+#endif
+
+#ifdef TRACE_RINGS
+#ifndef TDT_BATCHING
+static int pending = 0; /* only for debugging purposes */
+#endif /* TDT_BATCHING */
+/* CHAR DRIVER CODE */
+#define NN 100000
+static int16_t op[NN];
+static int opc = 0;
+static int reg_write_type = 0; /* low-latency/bulk */
+static struct semaphore char_mutex;
+static struct cdev char_cdev;
+static spinlock_t op_lock;
+
+static int reg_norm_writes = 0;
+static int reg_opt_writes = 0;
+
+static unsigned int xmits_count = 0;
+#define XMIT_OVERFLOW 100000
+
+static ssize_t char_read(struct file* file_ptr, char __user * buffer, size_t n, loff_t * offset_ptr)
+{
+	int nread = 0;
+	if (opc < NN)
+	{
+		return 0;
+	}
+	//printk(KERN_INFO "read request of %d bytes\n", (int)n );
+	if (down_interruptible(&char_mutex))
+		return -ERESTARTSYS;
+	if ( *offset_ptr >= NN*sizeof(int16_t) ) // EOF
+		goto leave;
+	if ( *offset_ptr+n >= NN*sizeof(int16_t) )  // >
+		nread = NN*sizeof(int16_t) - *offset_ptr;
+	else
+		nread = n;
+	nread &= ~1;
+	if (copy_to_user(buffer, ((char *)op) + *offset_ptr, nread)){
+		nread = -EFAULT;
+		goto leave;
+	}
+	*offset_ptr += nread;
+	//printk(KERN_INFO "read %d bytes, off=%d\n", nread, (int)(*offset_ptr) );
+leave:
+	up(&char_mutex);
+	return nread;
+}
+
+static int char_open(struct inode * inode_ptr, struct file * file_ptr)
+{
+	int ret;
+	if((ret = nonseekable_open(inode_ptr, file_ptr))) {
+		printk(KERN_INFO "nonseekable_open() failed\n");
+	}
+	
+	if ((file_ptr->f_flags & O_ACCMODE) == O_WRONLY) {
+		return -EPERM;
+	}
+	return 0;
+}
+
+
+static int char_release(struct inode * inode_ptr, struct file * file_ptr)
+{
+	return 0;
+}
+
+static dev_t device_number;
+static struct file_operations char_fops = {
+	.owner = THIS_MODULE,
+	.llseek = no_llseek,
+	.read = char_read,
+	.open = char_open,
+	.release = char_release,
+};
+#endif /* TRACE_RINGS */
+
 /**
  * e1000_get_hw_dev - return device
  * used by hardware layer to print debugging information
@@ -255,6 +346,32 @@ static int __init e1000_init_module(void)
 			pr_info("copybreak enabled for "
 				   "packets <= %u bytes\n", copybreak);
 	}
+
+#ifdef TRACE_RINGS
+	if (ret < 0)
+		return ret;
+	/* Dynamic allocation of a device number */
+	if ((ret = alloc_chrdev_region(&device_number, 0, 1, "char_e1000")) < 0) {
+		printk(KERN_INFO "alloc_chrdev_region() failed");
+		pci_unregister_driver(&e1000_driver);
+		return ret;
+	}	
+	printk(KERN_INFO "[e1000] Device number allocated = (%d,%d)\n", MAJOR(device_number), MINOR(device_number));
+	/* Registering a char device into the kernel */
+	cdev_init(&char_cdev, &char_fops);
+	char_cdev.owner = THIS_MODULE;
+	char_cdev.ops = &char_fops;
+	if ((ret = cdev_add(&char_cdev, device_number, 1))) {
+		printk(KERN_INFO "cdev_add() failed[%d]!\n", ret);
+		unregister_chrdev_region(device_number, 1);
+		pci_unregister_driver(&e1000_driver);
+	}
+	sema_init(&char_mutex, 1);
+	spin_lock_init(&op_lock);
+#endif /* TRACE_RINGS */
+#ifdef TDT_BATCHING
+	spin_lock_init(&reg_write_lock);
+#endif
 	return ret;
 }
 
@@ -269,6 +386,10 @@ module_init(e1000_init_module);
 
 static void __exit e1000_exit_module(void)
 {
+#ifdef TRACE_RINGS
+	cdev_del(&char_cdev);
+	unregister_chrdev_region(device_number, 1);
+#endif
 	pci_unregister_driver(&e1000_driver);
 }
 
@@ -3042,6 +3163,50 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	if (unlikely(tx_flags & E1000_TX_FLAGS_NO_FCS))
 		tx_desc->lower.data &= ~(cpu_to_le32(E1000_TXD_CMD_IFCS));
 
+#ifdef TDT_BATCHING
+	tx_ring->next_to_use = i;
+	spin_lock(&reg_write_lock);
+	/* Ok, now we should write the NTU value to the TDT register.
+	 * First of all we take a snapshot of the NTU value, because if
+	 * the TDT write is delayed (see below) we will do the write during 
+	 * the interrupt routine. But we cannot read NTU directly from the 
+	 * interrupt routine, because we could read an inconsistent state
+	 * (due to the way the NTU variable is updated). The variable
+	 * shadow_ntu is therefore a coherent snapshot of the NTU value. */
+	shadow_ntu = tx_ring->next_to_use;
+	if (!pending) {
+	/* If there is no pending interrupt, we write the TDT register 
+	 * immediately (if necessary). Otherwise the write will be 
+	 * executed during the interrupt routine. */
+#ifdef TRACE_RINGS
+		pending = (1 << 12);
+		reg_write_type = (1 << 13);
+#else
+		pending = 1;
+#endif /* TRACE_RINGS */
+		wmb();
+		if (software_tdt != shadow_ntu) {
+			writel(shadow_ntu, hw->hw_addr + tx_ring->tdt);
+			software_tdt = shadow_ntu;
+#ifdef TRACE_RINGS
+			reg_opt_writes++;
+#endif
+		}
+		mmiowb();
+	}
+#ifdef TRACE_RINGS
+	else
+		reg_write_type = 0;
+#endif /* TRACE_RINGS */
+	spin_unlock(&reg_write_lock);
+#ifdef TRACE_RINGS
+	reg_norm_writes++;
+	if (reg_norm_writes == 300000) {
+		printk(KERN_INFO "%d %d\n", reg_norm_writes, reg_opt_writes);
+		reg_norm_writes = reg_opt_writes = 0;
+	}
+#endif /* TRACE_RINGS */
+#else /* TDT_BATCHING */
 	/* Force memory writes to complete before letting h/w
 	 * know there are new descriptors to fetch.  (Only
 	 * applicable for weak-ordered memory model archs,
@@ -3053,6 +3218,13 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	/* we need this if more than one processor can write to our tail
 	 * at a time, it syncronizes IO on IA64/Altix systems */
 	mmiowb();
+#endif /* TDT_BATCHING */
+#ifdef TRACE_RINGS
+	spin_lock(&op_lock);
+	if (opc < NN)
+		op[opc++] = (int16_t)(i | pending | reg_write_type);
+	spin_unlock(&op_lock);
+#endif /* TRACE_RINGS */
 }
 
 /* 82547 workaround to avoid controller hang in half-duplex environment.
@@ -3281,6 +3453,13 @@ static netdev_tx_t e1000_xmit_frame(struct sk_buff *skb,
 		/* Make sure there is space in the ring for the next send. */
 		e1000_maybe_stop_tx(netdev, tx_ring, MAX_SKB_FRAGS + 2);
 
+#ifdef TRACE_RINGS
+		xmits_count++;
+		if (xmits_count == XMIT_OVERFLOW) {
+			printk(KERN_INFO "[ovf]\n");
+			xmits_count = 0;
+		}
+#endif /* TRACE_RINGS */
 	} else {
 		dev_kfree_skb_any(skb);
 		tx_ring->buffer_info[first].time_stamp = 0;
@@ -3828,6 +4007,11 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 {
 	struct e1000_adapter *adapter = container_of(napi, struct e1000_adapter, napi);
 	int tx_clean_complete = 0, work_done = 0;
+#ifdef TDT_BATCHING
+	struct e1000_hw *hw;
+      	
+	hw = &adapter->hw;
+#endif
 
 	tx_clean_complete = e1000_clean_tx_irq(adapter, &adapter->tx_ring[0]);
 
@@ -3844,6 +4028,34 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 		if (!test_bit(__E1000_DOWN, &adapter->flags))
 			e1000_irq_enable(adapter);
 	}
+
+#ifdef TDT_BATCHING
+	wmb();
+	spin_lock(&reg_write_lock);
+	if (software_tdt != shadow_ntu) {
+	/* If the TDT is not updated, due to a delayed write, we update it */
+		writel(shadow_ntu, hw->hw_addr + adapter->tx_ring[0].tdt);
+		software_tdt = shadow_ntu;
+#ifdef TRACE_RINGS
+		reg_write_type = (1 << 14);
+		reg_opt_writes++;
+#endif /* TRACE_RINGS */
+	} else {
+#ifdef TRACE_RINGS
+		reg_write_type = 0;
+#endif /* TRACE_RINGS */
+		pending = 0;
+	}
+	spin_unlock(&reg_write_lock);
+	mmiowb();
+#endif /* TDT_BATCHING */
+
+#ifdef TRACE_RINGS
+	spin_lock(&op_lock);	
+	if (opc < NN)
+		op[opc++] = -1 * ((int16_t)(adapter->tx_ring[0].next_to_use | pending | reg_write_type)) - 1;
+	spin_unlock(&op_lock);
+#endif
 
 	return work_done;
 }
