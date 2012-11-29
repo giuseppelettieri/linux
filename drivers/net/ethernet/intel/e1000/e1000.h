@@ -70,6 +70,8 @@
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
 
+#define TDT_BATCHING  /* enable batching optimizations for virtualized environments */
+
 #define BAR_0		0
 #define BAR_1		1
 #define BAR_5		5
@@ -127,8 +129,13 @@ struct e1000_adapter;
 
 /* How many Tx Descriptors do we need to call netif_wake_queue ? */
 #define E1000_TX_QUEUE_WAKE	16
+
 /* How many Rx Buffers do we bundle into one write to the hardware ? */
-#define E1000_RX_BUFFER_WRITE	512	/* Must be power of 2 */
+#ifdef TDT_BATCHING
+#define E1000_RX_BUFFER_WRITE	1024	/* Must be power of 2 */
+#else /* TDT_BATCHING */
+#define E1000_RX_BUFFER_WRITE	16	/* Must be power of 2 */
+#endif /* TDT_BATCHING */
 
 #define AUTO_ALL_MODES            0
 #define E1000_EEPROM_82544_APM    0x0004
