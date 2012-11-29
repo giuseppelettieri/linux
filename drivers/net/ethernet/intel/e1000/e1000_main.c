@@ -34,6 +34,8 @@
 #include <linux/if_vlan.h>
 
 #define TRACE_RINGS
+#define TDT_BATCHING
+
 #ifdef TRACE_RINGS
 #include <linux/cdev.h>
 #include <linux/semaphore.h>
@@ -229,7 +231,6 @@ static int debug = -1;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,...,16=all)");
 
-#define TDT_BATCHING
 #ifdef TDT_BATCHING
 static int software_tdt = 0; /* coherent software copy of the TDT register: used to read the TDT value without accessing the real TDT */
 static spinlock_t reg_write_lock; /* lock used to atomically access the TDT register and its software copy */
@@ -238,7 +239,10 @@ static int pending = 0;
 #endif
 
 #ifdef TRACE_RINGS
-#ifndef TDT_BATCHING
+#ifdef TDT_BATCHING
+static int reg_norm_writes = 0;
+static int reg_opt_writes = 0;
+#else
 static int pending = 0; /* only for debugging purposes */
 #endif /* TDT_BATCHING */
 /* CHAR DRIVER CODE */
@@ -250,8 +254,6 @@ static struct semaphore char_mutex;
 static struct cdev char_cdev;
 static spinlock_t op_lock;
 
-static int reg_norm_writes = 0;
-static int reg_opt_writes = 0;
 
 static unsigned int xmits_count = 0;
 #define XMIT_OVERFLOW 100000
