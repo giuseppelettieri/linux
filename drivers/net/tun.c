@@ -861,12 +861,91 @@ static ssize_t tun_get_user(struct tun_struct *tun, void *msg_control,
 }
 
 /* Get many packets from user space buffer */
-static ssize_t tun_get_user_multiframe(struct tun_struct *tun, 
-					void *msg_control,
-					const struct iovec *iv,
+static ssize_t tun_get_user_multiframe(struct tun_struct *tun, void *msg_control,
+			    const struct iovec *iv, ssize_t total_len,
+			    size_t count, int noblock)
+{
+	struct tun_pi pi = { 0, cpu_to_be16(ETH_P_IP) };
+	struct sk_buff *skb;
+	size_t len, align = NET_SKB_PAD;
+	const struct iovec * civ;
+	int offset = 0;
+	int copylen;
+	bool zerocopy = false;
+	int err;
+	int i;
+
+	align += NET_IP_ALIGN;
+
+	if (msg_control)
+		zerocopy = true;
+
+	for (i=0; i<count; i++) {
+		len = iv[i].iov_len;
+		civ = &iv[i];
+		offset = 0;
+
+		if (!(tun->flags & TUN_NO_PI)) {
+			if ((len -= sizeof(pi)) > total_len)
+				return -EINVAL;
+
+			if (memcpy_fromiovecend((void *)&pi, civ, 0, sizeof(pi)))
+				return -EFAULT;
+			offset += sizeof(pi);
+		}
+
+		if (unlikely(len < ETH_HLEN ))
+			return -EINVAL;
+
+		if (zerocopy) {
+			copylen = GOODCOPY_LEN;
+		} else
+			copylen = len;
+
+		skb = tun_alloc_skb(tun, align, copylen, 0, noblock);
+		if (IS_ERR(skb)) {
+			if (PTR_ERR(skb) != -EAGAIN)
+				tun->dev->stats.rx_dropped++;
+			return PTR_ERR(skb);
+		}
+
+		if (zerocopy)
+			err = zerocopy_sg_from_iovec(skb, civ, offset, 1);
+		else
+			err = skb_copy_datagram_from_iovec(skb, 0, civ, offset, len);
+
+		if (err) {
+			tun->dev->stats.rx_dropped++;
+			kfree_skb(skb);
+			return -EFAULT;
+		}
+
+		skb->protocol = eth_type_trans(skb, tun->dev);
+
+		/* copy skb_ubuf_info for callback when skb has no error */
+		if (zerocopy) {
+			skb_shinfo(skb)->destructor_arg = msg_control;
+			skb_shinfo(skb)->tx_flags |= SKBTX_DEV_ZEROCOPY;
+		}
+
+		if (i != count-1)
+			skb_shinfo(skb)->tx_flags |= SKBTX_MULTIFRAME_MORE;
+
+		netif_rx_ni(skb);
+
+		tun->dev->stats.rx_packets++;
+		tun->dev->stats.rx_bytes += len;
+
+	}
+
+	return total_len;
+}
+
+/*
+static ssize_t tun_get_user_multiframe_old(struct tun_struct *tun, void *msg_control,
+					const struct iovec *iv, ssize_t total_len,
 					 size_t count, int noblock)
 {
-	size_t total_len = 0;
 	//struct tun_pi pi = { 0, cpu_to_be16(ETH_P_IP) };
 	struct sk_buff *skb;
 	size_t len, align = NET_SKB_PAD;
@@ -910,10 +989,9 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun,
 
 		tun->dev->stats.rx_packets++;
 		tun->dev->stats.rx_bytes += len;
-		total_len += len;
 	}
 	return total_len;
-}
+} */
 
 static ssize_t tun_chr_aio_write(struct kiocb *iocb, const struct iovec *iv,
 			      unsigned long count, loff_t pos)
@@ -928,7 +1006,7 @@ static ssize_t tun_chr_aio_write(struct kiocb *iocb, const struct iovec *iv,
 	tun_debug(KERN_INFO, tun, "tun_chr_write %ld\n", count);
 
 	if (tun->flags & TUN_MULTI_FRAME)
-		result = tun_get_user_multiframe(tun, NULL, iv, count, file->f_flags & O_NONBLOCK);
+		result = tun_get_user_multiframe(tun, NULL, iv, iov_length(iv, count), count, file->f_flags & O_NONBLOCK);
 	else
 		result = tun_get_user(tun, NULL, iv, iov_length(iv, count), count, file->f_flags & O_NONBLOCK);
 
