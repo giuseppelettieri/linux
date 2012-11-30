@@ -1105,23 +1105,25 @@ static ssize_t tun_do_read(struct tun_struct *tun,
 	return ret;
 }
 
+//#define RATE_QULEN
+#ifdef RATE_QULEN
 static int qulen = 0;
 static int rc = 0;
 static int rcpr = 64;
 static int jstart;
 static int jend;
+#endif /* RATE_QULEN */
 
 static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 			   struct kiocb *iocb, const struct iovec *iv,
 			   unsigned long count, int noblock)
 {
 	DECLARE_WAITQUEUE(wait, current);
-	struct sk_buff *skb;
+	struct sk_buff *skb = NULL;
 	ssize_t ret;
 	ssize_t total = 0;
 	int i = 0;
 	size_t len;
-	unsigned long flags = 0;
 
 	tun_debug(KERN_INFO, tun, "tun_chr_read\n");
 
@@ -1147,49 +1149,34 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 			}
 
 			/* Nothing to read, let's sleep */
-			flags = 0;
 			schedule();
 			continue;
 		}
-		
-
-		if (len < skb->len) {  // FIXME move this check in tun_put_user
-			kfree_skb(skb);
-			total = -EINVAL;
-			goto out;
-		}
-		else {
-			ret = tun_put_user(tun, skb, iv, len);
-			total += ret;
-		}
-		kfree_skb(skb);
-		i++;
 		break;
 	}
 
+#ifdef RATE_QULEN
 	qulen += skb_queue_len(&tun->socket.sk->sk_receive_queue) + 1;
 	rc++;
-
-	while (i < count) 
+#endif
+	for (;;)
 	{
+		/* copy the skb content to userspace */
+		ret = tun_put_user(tun, skb, &iv[i], len);
+		kfree_skb(skb);
+		if (ret < 0) {
+			total = ret;
+			break;
+		}
+		total += ret;
+		if (++i == count)
+			break;
+
+		/* try to extract another skb */
 		skb = skb_dequeue(&tun->socket.sk->sk_receive_queue);
 		if (!skb)
 			break;
 		len = iv[i].iov_len;
-		if (len < skb->len) {
-			kfree_skb(skb);
-			total = -EINVAL;
-			goto out;
-		}
-		ret = tun_put_user(tun, skb, &iv[i], len);
-		if (ret < 0) {
-			kfree_skb(skb);
-			total = ret;
-			goto out;
-		}
-		total += ret;
-		kfree_skb(skb);
-		i++;
 	}
 
 out:
@@ -1198,7 +1185,8 @@ out:
 	current->state = TASK_RUNNING;
 	if (unlikely(!noblock))
 		remove_wait_queue(&tun->wq.wait, &wait);
-	
+
+#ifdef RATE_QULEN	
 	if (rc == rcpr)
 	{
 		printk(KERN_INFO "[TAP] sock rx queue avg len = %d\n", qulen/rc);
@@ -1211,6 +1199,7 @@ out:
 			rcpr >>= 1;
 		jstart = jend;
 	}
+#endif
 	return total;
 	
 }
@@ -1794,7 +1783,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 
 	case TUNSETMULTIFRAMEMODE:
 		/* Can be set only for TAPs, and only if TUN_NO_PI is set */
-		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV || !(tun->flags & TUN_NO_PI) || (tun->flags & TUN_VNET_HDR))
+		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV || (tun->flags & TUN_VNET_HDR))
 		{
 			ret = -EINVAL;
 			break;
