@@ -888,8 +888,7 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun, void *msg_control
 		if (!(tun->flags & TUN_NO_PI)) {
 			if ((len -= sizeof(pi)) > total_len)
 				return -EINVAL;
-
-			if (memcpy_fromiovecend((void *)&pi, civ, 0, sizeof(pi)))
+			if (copy_from_user((void *)&pi, civ->iov_base, sizeof(pi)))
 				return -EFAULT;
 			offset += sizeof(pi);
 		}
@@ -902,6 +901,8 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun, void *msg_control
 		} else
 			copylen = len;
 
+		/* since the fourth parameter is 0 we are sure the skb 
+		   is going to be linear */
 		skb = tun_alloc_skb(tun, align, copylen, 0, noblock);
 		if (IS_ERR(skb)) {
 			if (PTR_ERR(skb) != -EAGAIN)
@@ -912,7 +913,10 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun, void *msg_control
 		if (zerocopy)
 			err = zerocopy_sg_from_iovec(skb, civ, offset, 1);
 		else
-			err = skb_copy_datagram_from_iovec(skb, 0, civ, offset, len);
+			/* Since we know the skb is linear, we can use 
+			   copy_from_user into skb->data, instead of the 
+			   general skb_copy_datagram_from_iovec */	
+			err = copy_from_user(skb->data, civ->iov_base, len);
 
 		if (err) {
 			tun->dev->stats.rx_dropped++;
@@ -940,58 +944,6 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun, void *msg_control
 
 	return total_len;
 }
-
-/*
-static ssize_t tun_get_user_multiframe_old(struct tun_struct *tun, void *msg_control,
-					const struct iovec *iv, ssize_t total_len,
-					 size_t count, int noblock)
-{
-	//struct tun_pi pi = { 0, cpu_to_be16(ETH_P_IP) };
-	struct sk_buff *skb;
-	size_t len, align = NET_SKB_PAD;
-	bool zerocopy = false;
-	int i;
-	
-	align += NET_IP_ALIGN; //if ((tun->flags & TUN_TYPE_MASK) == TUN_TAP_DEV)
-
-	if (msg_control)
-	{
-		zerocopy = true;
-		printk(KERN_INFO "[TAP multi-frame error] zerocopy is not supported");
-		return -EINVAL;
-	}
-
-	for (i=0; i<count; i++)
-	{
-		len = iv[i].iov_len;
-
-		skb = tun_alloc_skb(tun, align, len, 0, noblock);
-		if (IS_ERR(skb)) {
-			if (PTR_ERR(skb) != -EAGAIN)
-				tun->dev->stats.rx_dropped++;
-			return PTR_ERR(skb);
-		}
-
-		//err = skb_copy_datagram_from_iovec(skb, 0, iv, offset, len);
-		if(copy_from_user(skb->data, iv[i].iov_base, len))
-		{
-			tun->dev->stats.rx_dropped++;
-			kfree_skb(skb);
-			return -EFAULT;
-		}
-
-		skb->protocol = eth_type_trans(skb, tun->dev);
-
-		if (i != count-1)
-			skb_shinfo(skb)->tx_flags |= SKBTX_MULTIFRAME_MORE;
-
-		netif_rx_ni(skb);
-
-		tun->dev->stats.rx_packets++;
-		tun->dev->stats.rx_bytes += len;
-	}
-	return total_len;
-} */
 
 static ssize_t tun_chr_aio_write(struct kiocb *iocb, const struct iovec *iv,
 			      unsigned long count, loff_t pos)
