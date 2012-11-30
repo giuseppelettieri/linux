@@ -1039,7 +1039,8 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 	if (tun->flags & TUN_MULTI_FRAME)
 	{	
 		uint16_t frame_size = skb->len;
-		len -= sizeof(frame_size);
+		if((len -= sizeof(frame_size)) < 0)
+			return -EINVAL;
 		//TODO skb_len = cpu_to_le(skb_len) for heterogeneus multiprocessors systems
 		if(unlikely(copy_to_user(iv->iov_base + total, (void*)&frame_size, sizeof(frame_size))))
 			return -EFAULT;
@@ -1112,7 +1113,7 @@ static int rc = 0;
 static int rcpr = 64;
 static int jstart;
 static int jend;
-#endif /* RATE_QULEN */
+#endif
 
 static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 			   struct kiocb *iocb, const struct iovec *iv,
@@ -1128,6 +1129,7 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 	tun_debug(KERN_INFO, tun, "tun_chr_read\n");
 
 	len = iv[0].iov_len;
+
 	if (unlikely(!noblock))
 		add_wait_queue(&tun->wq.wait, &wait);
 	while (len) {
@@ -1159,7 +1161,7 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 	qulen += skb_queue_len(&tun->socket.sk->sk_receive_queue) + 1;
 	rc++;
 #endif
-	for (;;)
+	for (;;) 
 	{
 		/* copy the skb content to userspace */
 		ret = tun_put_user(tun, skb, &iv[i], len);
@@ -1169,9 +1171,9 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 			break;
 		}
 		total += ret;
-		if (++i == count)
+		i++;
+		if (i == count)
 			break;
-
 		/* try to extract another skb */
 		skb = skb_dequeue(&tun->socket.sk->sk_receive_queue);
 		if (!skb)
