@@ -135,6 +135,8 @@ struct tun_struct {
 	struct socket_wq	wq;
 
 	int			vnet_hdr_sz;
+	int			receive_queue_len;
+	int			tx_burst_packets;
 
 #ifdef TUN_DEBUG
 	int debug;
@@ -383,6 +385,7 @@ static int tun_net_close(struct net_device *dev)
 static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct tun_struct *tun = netdev_priv(dev);
+	unsigned long flags;
 
 	tun_debug(KERN_INFO, tun, "tun_net_xmit %d\n", skb->len);
 
@@ -423,7 +426,14 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 	skb_orphan(skb);
 
 	/* Enqueue packet */
-	skb_queue_tail(&tun->socket.sk->sk_receive_queue, skb);
+	spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock, flags);
+	__skb_queue_tail(&tun->socket.sk->sk_receive_queue, skb);
+	tun->tx_burst_packets++;
+	if (!(skb_shinfo(skb)->tx_flags & SKBTX_MULTIFRAME_MORE)) {
+		tun->receive_queue_len += tun->tx_burst_packets;
+		tun->tx_burst_packets = 0;
+	}
+	spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
 
 	/* Notify and wake up reader process */
 	if (!(skb_shinfo(skb)->tx_flags & SKBTX_MULTIFRAME_MORE)) {
@@ -565,7 +575,7 @@ static unsigned int tun_chr_poll(struct file *file, poll_table * wait)
 
 	poll_wait(file, &tun->wq.wait, wait);
 
-	if (!skb_queue_empty(&sk->sk_receive_queue))
+	if (tun->receive_queue_len > 0)
 		mask |= POLLIN | POLLRDNORM;
 
 	if (sock_writeable(sk) ||
@@ -1041,9 +1051,15 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 		uint16_t frame_size = skb->len;
 		if((len -= sizeof(frame_size)) < 0)
 			return -EINVAL;
-		//TODO skb_len = cpu_to_le(skb_len) for heterogeneus multiprocessors systems
-		if(unlikely(copy_to_user(iv->iov_base + total, (void*)&frame_size, sizeof(frame_size))))
+		/*if(unlikely(copy_to_user(iv->iov_base + total, (void*)&frame_size, sizeof(frame_size))))
+		{
+			printk("ERRORE!!\n");
 			return -EFAULT;
+		}*/
+		if (unlikely(memcpy_toiovecend(iv, (void *)&frame_size, total,
+					       sizeof(frame_size)))) {
+			return -EFAULT;
+		}
 		total += sizeof(frame_size);
 	}
 
@@ -1065,6 +1081,7 @@ static ssize_t tun_do_read(struct tun_struct *tun,
 	DECLARE_WAITQUEUE(wait, current);
 	struct sk_buff *skb;
 	ssize_t ret = 0;
+	unsigned long flags;
 
 	tun_debug(KERN_INFO, tun, "tun_chr_read\n");
 
@@ -1074,7 +1091,9 @@ static ssize_t tun_do_read(struct tun_struct *tun,
 		current->state = TASK_INTERRUPTIBLE;
 
 		/* Read frames from the queue */
-		if (!(skb=skb_dequeue(&tun->socket.sk->sk_receive_queue))) {
+		spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock, flags);
+		if (!(skb=__skb_dequeue(&tun->socket.sk->sk_receive_queue))) {
+			spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
 			if (noblock) {
 				ret = -EAGAIN;
 				break;
@@ -1092,6 +1111,8 @@ static ssize_t tun_do_read(struct tun_struct *tun,
 			schedule();
 			continue;
 		}
+		tun->receive_queue_len--;
+		spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
 		netif_wake_queue(tun->dev);
 
 		ret = tun_put_user(tun, skb, iv, len);
@@ -1125,6 +1146,7 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 	ssize_t total = 0;
 	int i = 0;
 	size_t len;
+	unsigned long flags = 0;
 
 	tun_debug(KERN_INFO, tun, "tun_chr_read\n");
 
@@ -1136,7 +1158,9 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 		current->state = TASK_INTERRUPTIBLE;
 
 		/* Read frames from the queue */
-		if (!(skb=skb_dequeue(&tun->socket.sk->sk_receive_queue))) {
+		spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock, flags);
+		if (!(skb=__skb_dequeue(&tun->socket.sk->sk_receive_queue))) {
+			spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
 			if (noblock) {
 				total = -EAGAIN;
 				goto out;
@@ -1154,17 +1178,15 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 			schedule();
 			continue;
 		}
+		tun->receive_queue_len--;
+		spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
 		break;
 	}
 
-#ifdef RATE_QULEN
-	qulen += skb_queue_len(&tun->socket.sk->sk_receive_queue) + 1;
-	rc++;
-#endif
 	for (;;) 
 	{
 		/* copy the skb content to userspace */
-		ret = tun_put_user(tun, skb, &iv[i], len);
+		ret = tun_put_user(tun, skb, iv+i, len);
 		kfree_skb(skb);
 		if (ret < 0) {
 			total = ret;
@@ -1175,7 +1197,11 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 		if (i == count)
 			break;
 		/* try to extract another skb */
-		skb = skb_dequeue(&tun->socket.sk->sk_receive_queue);
+		spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock, flags);
+		skb = __skb_dequeue(&tun->socket.sk->sk_receive_queue);
+		if (skb)
+			tun->receive_queue_len--;
+		spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
 		if (!skb)
 			break;
 		len = iv[i].iov_len;
@@ -1188,20 +1214,6 @@ out:
 	if (unlikely(!noblock))
 		remove_wait_queue(&tun->wq.wait, &wait);
 
-#ifdef RATE_QULEN	
-	if (rc == rcpr)
-	{
-		printk(KERN_INFO "[TAP] sock rx queue avg len = %d\n", qulen/rc);
-		qulen = 0;
-		rc = 0;
-		jend = jiffies;
-		if (jend-jstart < 400)
-			rcpr <<= 1;
-		else if(jend-jstart > 800 && rcpr > 1)
-			rcpr >>= 1;
-		jstart = jend;
-	}
-#endif
 	return total;
 	
 }
@@ -1450,6 +1462,8 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 		tun->flags = flags;
 		tun->txflt.count = 0;
 		tun->vnet_hdr_sz = sizeof(struct virtio_net_hdr);
+		tun->receive_queue_len = 0;
+		tun->tx_burst_packets = 0;
 		set_bit(SOCK_EXTERNALLY_ALLOCATED, &tun->socket.flags);
 
 		err = -ENOMEM;
