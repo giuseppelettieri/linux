@@ -3063,8 +3063,8 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	 * interrupt routine, because we could read an inconsistent state
 	 * (due to the way the NTU variable is updated). The variable
 	 * shadow_ntu is therefore a coherent snapshot of the NTU value. */
-	shadow_ntu = tx_ring->next_to_use;
 	spin_lock(&reg_write_lock);
+	shadow_ntu = tx_ring->next_to_use;
 	if (!pending) {
 	/* If there is no pending interrupt, we write the TDT register 
 	 * immediately (if necessary). Otherwise the write will be 

@@ -21,7 +21,7 @@
 #include <linux/filter.h>
 
 /* Read queue size */
-#define TUN_READQ_SIZE	4096
+#define TUN_READQ_SIZE	8192
 
 /* TUN device flags */
 #define TUN_TUN_DEV 	0x0001	

@@ -961,7 +961,7 @@ static ssize_t tun_chr_aio_write(struct kiocb *iocb, const struct iovec *iv,
 	struct file *file = iocb->ki_filp;
 	struct tun_struct *tun = tun_get(file);
 	ssize_t result;
-	
+
 	if (!tun)
 		return -EBADFD;
 
@@ -1126,15 +1126,6 @@ static ssize_t tun_do_read(struct tun_struct *tun,
 
 	return ret;
 }
-
-//#define RATE_QULEN
-#ifdef RATE_QULEN
-static int qulen = 0;
-static int rc = 0;
-static int rcpr = 64;
-static int jstart;
-static int jend;
-#endif
 
 static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 			   struct kiocb *iocb, const struct iovec *iv,
@@ -1798,7 +1789,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case TUNSETMULTIFRAMEMODE:
-		/* Can be set only for TAPs, and only if TUN_NO_PI is set */
+		/* Can be set only for TAPs, and only if TUN_VNET_HDR is not set */
 		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV || (tun->flags & TUN_VNET_HDR))
 		{
 			ret = -EINVAL;
