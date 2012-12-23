@@ -33,7 +33,6 @@
 #include <linux/bitops.h>
 #include <linux/if_vlan.h>
 
-
 char e1000_driver_name[] = "e1000";
 static char e1000_driver_string[] = "Intel(R) PRO/1000 Network Driver";
 #define DRV_VERSION "7.3.21-k8-NAPI"
@@ -223,13 +222,6 @@ static int debug = -1;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,...,16=all)");
 
-#ifdef TDT_BATCHING
-static volatile int software_tdt = 0; /* coherent software copy of the TDT register: used to read the TDT value without accessing the real TDT */
-static spinlock_t reg_write_lock; /* lock used to atomically access the TDT register and its software copy */
-static volatile unsigned int shadow_ntu = 0; 
-static volatile int pending = 0; 
-#endif
-
 /**
  * e1000_get_hw_dev - return device
  * used by hardware layer to print debugging information
@@ -263,10 +255,6 @@ static int __init e1000_init_module(void)
 			pr_info("copybreak enabled for "
 				   "packets <= %u bytes\n", copybreak);
 	}
-
-#ifdef TDT_BATCHING
-	spin_lock_init(&reg_write_lock);
-#endif
 	return ret;
 }
 
@@ -1000,6 +988,12 @@ static int __devinit e1000_probe(struct pci_dev *pdev,
 	adapter->msg_enable = netif_msg_init(debug, DEFAULT_MSG_ENABLE);
 	adapter->bars = bars;
 	adapter->need_ioport = need_ioport;
+#ifdef TDT_BATCHING
+	spin_lock_init(&adapter->bat_tdt_lock);
+	adapter->bat_software_tdt = 0;
+	adapter->bat_shadow_ntu = 0;
+	adapter->bat_pending = 0;
+#endif
 
 	hw = &adapter->hw;
 	hw->back = adapter;
@@ -3062,22 +3056,20 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	 * the interrupt routine. But we cannot read NTU directly from the 
 	 * interrupt routine, because we could read an inconsistent state
 	 * (due to the way the NTU variable is updated). The variable
-	 * shadow_ntu is therefore a coherent snapshot of the NTU value. */
-	spin_lock(&reg_write_lock);
-	shadow_ntu = tx_ring->next_to_use;
-	if (!pending) {
+	 * bat_shadow_ntu is therefore a coherent snapshot of the NTU value.
+	 */
+	spin_lock(&adapter->bat_tdt_lock);
+	adapter->bat_shadow_ntu = tx_ring->next_to_use;
+	if (!adapter->bat_pending) {
 	/* If there is no pending interrupt, we write the TDT register 
-	 * immediately (if necessary). Otherwise the write will be 
+	 * immediately. Otherwise the write will be 
 	 * executed during the interrupt routine. */
-		pending = 1;
-		if (software_tdt != shadow_ntu) {
-			software_tdt = shadow_ntu;
-			wmb();
-			writel(shadow_ntu, hw->hw_addr + tx_ring->tdt);
-			mmiowb();
-		}
+		adapter->bat_pending = 1;
+		adapter->bat_software_tdt = adapter->bat_shadow_ntu;
+		writel(adapter->bat_shadow_ntu, hw->hw_addr + tx_ring->tdt);
+		mmiowb();
 	}
-	spin_unlock(&reg_write_lock);
+	spin_unlock(&adapter->bat_tdt_lock);
 #else /* TDT_BATCHING */
 	/* Force memory writes to complete before letting h/w
 	 * know there are new descriptors to fetch.  (Only
@@ -3889,17 +3881,16 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 	}
 
 #ifdef TDT_BATCHING
-	spin_lock(&reg_write_lock);
-	if (software_tdt != shadow_ntu) {
+	spin_lock(&adapter->bat_tdt_lock);
+	if (adapter->bat_software_tdt != adapter->bat_shadow_ntu) {
 	/* If the TDT is not updated, due to a delayed write, we update it */
-		software_tdt = shadow_ntu;
-		wmb();
-		writel(shadow_ntu, hw->hw_addr + adapter->tx_ring[0].tdt);
+		adapter->bat_software_tdt = adapter->bat_shadow_ntu;
+		writel(adapter->bat_shadow_ntu, hw->hw_addr + adapter->tx_ring[0].tdt);
 		mmiowb();
 	} else {
-		pending = 0;
+		adapter->bat_pending = 0;
 	}
-	spin_unlock(&reg_write_lock);
+	spin_unlock(&adapter->bat_tdt_lock);
 #endif /* TDT_BATCHING */
 
 	return work_done;

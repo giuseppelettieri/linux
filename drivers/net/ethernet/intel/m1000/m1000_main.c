@@ -260,9 +260,6 @@ static int __devinit m1000_probe(struct pci_dev *pdev,
     if (!adapter->hw_addr)
 	goto err_ioremap;
 
-    if (err)
-	goto err_sw_init;
-
     err = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
     if (err) {
 	pr_err("No usable DMA config, aborting\n");
@@ -325,7 +322,6 @@ static int __devinit m1000_probe(struct pci_dev *pdev,
     return 0;
 
 err_register:
-err_eeprom:
     kfree(adapter->tx_ring);
     kfree(adapter->rx_ring);
 err_dma:
@@ -347,7 +343,6 @@ err_pci_reg:
  * Hot-Plug event, or because the driver is going to be removed from
  * memory.
  **/
-
 static void __devexit m1000_remove(struct pci_dev *pdev)
 {
 	struct net_device *netdev = pci_get_drvdata(pdev);
@@ -374,6 +369,7 @@ static void __devexit m1000_remove(struct pci_dev *pdev)
 
 static int __devinit m1000_alloc_queues(struct m1000_adapter *adapter)
 {
+    // TODO swich to static allocation
     adapter->tx_ring = kcalloc(1, sizeof(struct m1000_tx_ring), GFP_KERNEL);
     if (!adapter->tx_ring)
 	return -ENOMEM;
@@ -419,6 +415,8 @@ static int m1000_open(struct net_device *netdev)
 	if (err)
 		goto err_setup_rx;
 
+	mmio_write32(adapter, CTRL, 0);  // tx/rx disabled
+	mmio_write32(adapter, IE, 0);    // interrupt disabled
 	/* before we allocate an interrupt, we must be ready to handle it.
 	 * Setting DEBUG_SHIRQ in the kernel makes it fire an interrupt
 	 * as soon as we call pci_request_irq, so we have to setup our
@@ -493,39 +491,38 @@ static int m1000_close(struct net_device *netdev)
  *
  * Return 0 on success, negative on failure
  **/
-
-static int m1000_setup_tx_resources(struct m1000_adapter *adapter,
-				    struct m1000_tx_ring *txdr)
+static int m1000_setup_tx_resources(struct m1000_adapter *adapter)
 {
     struct pci_dev *pdev = adapter->pdev;
     int size;
+    struct m1000_tx_ring * tx_ring = adapter->tx_ring;
 
-    size = sizeof(struct m1000_buffer) * txdr->count;
-    txdr->buffer_info = vzalloc(size);
-    if (!txdr->buffer_info) {
+    size = sizeof(struct m1000_buffer) * tx_ring->count;
+    tx_ring->buffer_info = vzalloc(size);
+    if (!tx_ring->buffer_info) {
 	e_err(probe, "Unable to allocate memory for the Tx descriptor "
 		"ring\n");
 	return -ENOMEM;
     }
 
     /* round up to nearest 4K */
-    txdr->size = txdr->count * sizeof(struct m1000_tx_desc);
-    txdr->size = ALIGN(txdr->size, 4096);
+    tx_ring->size = tx_ring->count * sizeof(struct m1000_desc);
+    tx_ring->size = ALIGN(tx_ring->size, 4096);
 
-    txdr->desc = dma_alloc_coherent(&pdev->dev, txdr->size, &txdr->dma,
+    tx_ring->desc = dma_alloc_coherent(&pdev->dev, tx_ring->size, &tx_ring->dma,
 	    GFP_KERNEL);
-    if (!txdr->desc) {
+    if (!tx_ring->desc) {
 setup_tx_desc_die:
-	vfree(txdr->buffer_info);
+	vfree(tx_ring->buffer_info);
 	e_err(probe, "Unable to allocate memory for the Tx descriptor "
 		"ring\n");
 	return -ENOMEM;
     }
 
-    memset(txdr->desc, 0, txdr->size);
+    memset(tx_ring->desc, 0, tx_ring->size);
 
-    txdr->next_to_use = 0;
-    txdr->next_to_clean = 0;
+    tx_ring->next_to_use = 0;
+    tx_ring->next_to_clean = 0;
 
     return 0;
 }
@@ -547,8 +544,6 @@ static void m1000_configure_tx(struct m1000_adapter *adapter)
     mmio_write32(adapter, TXRLEN, tdlen);
     mmio_write32(adapter, TXRBAH, (tdba >> 32));
     mmio_write32(adapter, TXRBAL, (tdba & 0x00000000ffffffffULL));
-    ew32(TDT, 0);
-    ew32(TDH, 0);
 }
 
 /**
@@ -559,44 +554,44 @@ static void m1000_configure_tx(struct m1000_adapter *adapter)
  * Returns 0 on success, negative on failure
  **/
 
-static int m1000_setup_rx_resources(struct m1000_adapter *adapter,
-				    struct m1000_rx_ring *rxdr)
+static int m1000_setup_rx_resources(struct m1000_adapter *adapter)
 {
-	struct pci_dev *pdev = adapter->pdev;
-	int size, desc_len;
+    struct pci_dev *pdev = adapter->pdev;
+    int size, desc_len;
+    struct m1000_rx_ring * rx_ring;
 
-	size = sizeof(struct m1000_buffer) * rxdr->count;
-	rxdr->buffer_info = vzalloc(size);
-	if (!rxdr->buffer_info) {
-		e_err(probe, "Unable to allocate memory for the Rx descriptor "
-		      "ring\n");
-		return -ENOMEM;
-	}
+    size = sizeof(struct m1000_buffer) * rx_ring->count;
+    rx_ring->buffer_info = vzalloc(size);
+    if (!rx_ring->buffer_info) {
+	e_err(probe, "Unable to allocate memory for the Rx descriptor "
+		"ring\n");
+	return -ENOMEM;
+    }
 
-	desc_len = sizeof(struct m1000_rx_desc);
+    desc_len = sizeof(struct m1000_desc);
 
-	/* Round up to nearest 4K */
+    /* Round up to nearest 4K */
 
-	rxdr->size = rxdr->count * desc_len;
-	rxdr->size = ALIGN(rxdr->size, 4096);
+    rx_ring->size = rx_ring->count * desc_len;
+    rx_ring->size = ALIGN(rx_ring->size, 4096);
 
-	rxdr->desc = dma_alloc_coherent(&pdev->dev, rxdr->size, &rxdr->dma,
-					GFP_KERNEL);
+    rx_ring->desc = dma_alloc_coherent(&pdev->dev, rx_ring->size, &rx_ring->dma,
+	    GFP_KERNEL);
 
-	if (!rxdr->desc) {
-		e_err(probe, "Unable to allocate memory for the Rx descriptor "
-		      "ring\n");
+    if (!rx_ring->desc) {
+	e_err(probe, "Unable to allocate memory for the Rx descriptor "
+		"ring\n");
 setup_rx_desc_die:
-		vfree(rxdr->buffer_info);
-		return -ENOMEM;
-	}
-	memset(rxdr->desc, 0, rxdr->size);
+	vfree(rx_ring->buffer_info);
+	return -ENOMEM;
+    }
+    memset(rx_ring->desc, 0, rx_ring->size);
 
-	rxdr->next_to_clean = 0;
-	rxdr->next_to_use = 0;
-	rxdr->rx_skb_top = NULL;
+    rx_ring->next_to_clean = 0;
+    rx_ring->next_to_use = 0;
+    rx_ring->rx_skb_top = NULL;
 
-	return 0;
+    return 0;
 }
 
 /**
@@ -615,12 +610,10 @@ static void m1000_configure_rx(struct m1000_adapter *adapter)
 
     /* Setup the HW Rx Head and Tail Descriptor Pointers and
      * the Base and Length of the Rx Descriptor Ring */
-    rdba = adapter->rx_ring[0].dma;
+    rdba = adapter->rx_ring->dma;
     mmio_write32(adapter, RXRLEN, rdlen);
     mmio_write32(adapter, RXRBAH, (rdba >> 32));
     mmio_write32(adapter, RDBAL, (rdba & 0x00000000ffffffffULL));
-    ew32(RDT, 0);
-    ew32(RDH, 0);
 }
 
 /**
