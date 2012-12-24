@@ -75,7 +75,14 @@
 #define BAR_1		1
 #define BAR_5		5
 
-struct m1000_adapter;
+struct m1000_descriptor {
+    uint64_t buffer_address;
+    uint32_t buffer_length;
+    uint32_t padding;
+};
+
+#define M1000_TX_ENABLED    1
+#define M1000_RX_ENABLED    2
 
 //#include "m1000_hw.h"
 
@@ -104,7 +111,7 @@ struct m1000_buffer {
 
 struct m1000_tx_ring {
 	/* pointer to the descriptor ring memory */
-	void *desc;
+	struct m1000_descriptor *desc;
 	/* physical address of the descriptor ring */
 	dma_addr_t dma;
 	/* length of descriptor ring in bytes */
@@ -121,7 +128,7 @@ struct m1000_tx_ring {
 
 struct m1000_rx_ring {
 	/* pointer to the descriptor ring memory */
-	void *desc;
+	struct m1000_descriptor *desc;
 	/* physical address of the descriptor ring */
 	dma_addr_t dma;
 	/* length of descriptor ring in bytes */
@@ -175,7 +182,6 @@ struct m1000_adapter {
     struct pci_dev *pdev;
 
     /* structs defined in m1000_hw.h */
-    struct m1000_hw hw;
     u8 __iomem *hw_addr;  // registers base address
     u8 mac_addr[6];
 
@@ -207,8 +213,6 @@ struct m1000_adapter {
 	dev_err(&adapter->pdev->dev, format, ## arg)
 
 
-extern int m1000_up(struct m1000_adapter *adapter);
-extern void m1000_down(struct m1000_adapter *adapter);
 extern void m1000_check_options(struct m1000_adapter *adapter);
 
 #endif /* _E1000_H_ */

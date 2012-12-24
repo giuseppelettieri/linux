@@ -4,7 +4,7 @@
 
 obj-$(CONFIG_E100) += e100.o
 obj-$(CONFIG_E1000) += e1000/
-obj-y += m1000/
+obj-$(CONFIG_E1000) += m1000/
 obj-$(CONFIG_E1000E) += e1000e/
 obj-$(CONFIG_IGB) += igb/
 obj-$(CONFIG_IGBVF) += igbvf/
