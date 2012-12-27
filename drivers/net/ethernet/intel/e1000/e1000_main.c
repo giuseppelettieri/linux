@@ -991,12 +991,12 @@ static int __devinit e1000_probe(struct pci_dev *pdev,
 	adapter->msg_enable = netif_msg_init(debug, DEFAULT_MSG_ENABLE);
 	adapter->bars = bars;
 	adapter->need_ioport = need_ioport;
-#ifdef TDT_BATCHING
+
+	adapter->batching = batching;
 	spin_lock_init(&adapter->bat_tdt_lock);
 	adapter->bat_software_tdt = 0;
 	adapter->bat_shadow_ntu = 0;
 	adapter->bat_pending = 0;
-#endif
 
 	hw = &adapter->hw;
 	hw->back = adapter;
@@ -3051,41 +3051,43 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	if (unlikely(tx_flags & E1000_TX_FLAGS_NO_FCS))
 		tx_desc->lower.data &= ~(cpu_to_le32(E1000_TXD_CMD_IFCS));
 
-#ifdef TDT_BATCHING
-	tx_ring->next_to_use = i;
-	/* Ok, now we should write the NTU value to the TDT register.
-	 * First of all we take a snapshot of the NTU value, because if
-	 * the TDT write is delayed (see below) we will do the write during 
-	 * the interrupt routine. But we cannot read NTU directly from the 
-	 * interrupt routine, because we could read an inconsistent state
-	 * (due to the way the NTU variable is updated). The variable
-	 * bat_shadow_ntu is therefore a coherent snapshot of the NTU value.
-	 */
-	spin_lock(&adapter->bat_tdt_lock);
-	adapter->bat_shadow_ntu = tx_ring->next_to_use;
-	if (!adapter->bat_pending) {
-	/* If there is no pending interrupt, we write the TDT register 
-	 * immediately. Otherwise the write will be 
-	 * executed during the interrupt routine. */
-		adapter->bat_pending = 1;
-		adapter->bat_software_tdt = adapter->bat_shadow_ntu;
-		writel(adapter->bat_shadow_ntu, hw->hw_addr + tx_ring->tdt);
-		mmiowb();
-	}
-	spin_unlock(&adapter->bat_tdt_lock);
-#else /* TDT_BATCHING */
-	/* Force memory writes to complete before letting h/w
-	 * know there are new descriptors to fetch.  (Only
-	 * applicable for weak-ordered memory model archs,
-	 * such as IA-64). */
-	wmb();
+	adapter->batching = batching;
+	if (adapter->batching) {
+		tx_ring->next_to_use = i;
+		/* Ok, now we should write the NTU value to the TDT 
+		 * register. First of all we take a snapshot of the NTU 
+		 * value, because if the TDT write is delayed (see below)
+		 * we will do the write during the interrupt routine. But
+		 * we cannot read NTU directly from the interrupt routine,
+		 * because we could read an inconsistent state (due to the
+		 * way the NTU variable is updated). The variable 
+		 * bat_shadow_ntu is therefore a coherent snapshot of the
+		 * NTU value. */
+		spin_lock(&adapter->bat_tdt_lock);
+		adapter->bat_shadow_ntu = tx_ring->next_to_use;
+		if (!adapter->bat_pending) {
+			/* If there is no pending interrupt, we write the
+			 * TDT register immediately. Otherwise the write
+			 * will be executed during the interrupt routine. */
+			adapter->bat_pending = 1;
+			adapter->bat_software_tdt = adapter->bat_shadow_ntu;
+			writel(adapter->bat_shadow_ntu, hw->hw_addr + tx_ring->tdt);
+			mmiowb();
+		}
+		spin_unlock(&adapter->bat_tdt_lock);
+	} else {
+	    /* Force memory writes to complete before letting h/w
+	     * know there are new descriptors to fetch.  (Only
+	     * applicable for weak-ordered memory model archs,
+	     * such as IA-64). */
+	    wmb();
 
-	tx_ring->next_to_use = i;
-	writel(i, hw->hw_addr + tx_ring->tdt);
-	/* we need this if more than one processor can write to our tail
-	 * at a time, it syncronizes IO on IA64/Altix systems */
-	mmiowb();
-#endif /* TDT_BATCHING */
+	    tx_ring->next_to_use = i;
+	    writel(i, hw->hw_addr + tx_ring->tdt);
+	    /* we need this if more than one processor can write to our tail
+	     * at a time, it syncronizes IO on IA64/Altix systems */
+	    mmiowb();
+	}
 }
 
 /* 82547 workaround to avoid controller hang in half-duplex environment.
@@ -3861,11 +3863,7 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 {
 	struct e1000_adapter *adapter = container_of(napi, struct e1000_adapter, napi);
 	int tx_clean_complete = 0, work_done = 0;
-#ifdef TDT_BATCHING
-	struct e1000_hw *hw;
-      	
-	hw = &adapter->hw;
-#endif
+	struct e1000_hw *hw = &adapter->hw;
 
 	tx_clean_complete = e1000_clean_tx_irq(adapter, &adapter->tx_ring[0]);
 
@@ -3883,18 +3881,19 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 			e1000_irq_enable(adapter);
 	}
 
-#ifdef TDT_BATCHING
-	spin_lock(&adapter->bat_tdt_lock);
-	if (adapter->bat_software_tdt != adapter->bat_shadow_ntu) {
-	/* If the TDT is not updated, due to a delayed write, we update it */
-		adapter->bat_software_tdt = adapter->bat_shadow_ntu;
-		writel(adapter->bat_shadow_ntu, hw->hw_addr + adapter->tx_ring[0].tdt);
-		mmiowb();
-	} else {
-		adapter->bat_pending = 0;
+	if (adapter->batching) {
+		spin_lock(&adapter->bat_tdt_lock);
+		if (adapter->bat_software_tdt != adapter->bat_shadow_ntu) {
+			/* If the TDT is not updated, due to a delayed 
+			 * write, we update it */
+			adapter->bat_software_tdt = adapter->bat_shadow_ntu;
+			writel(adapter->bat_shadow_ntu, hw->hw_addr + adapter->tx_ring[0].tdt);
+			mmiowb();
+		} else {
+			adapter->bat_pending = 0;
+		}
+		spin_unlock(&adapter->bat_tdt_lock);
 	}
-	spin_unlock(&adapter->bat_tdt_lock);
-#endif /* TDT_BATCHING */
 
 	return work_done;
 }
@@ -4244,7 +4243,7 @@ next_desc:
 		rx_desc->status = 0;
 
 		/* return some buffers to hardware, one at a time is too slow */
-		if (unlikely(cleaned_count >= E1000_RX_BUFFER_WRITE)) {
+		if (unlikely(cleaned_count >= ((adapter->batching) ? E1000_RX_BUFFER_WRITE_BATCHING : E1000_RX_BUFFER_WRITE))) {
 			adapter->alloc_rx_buf(adapter, rx_ring, cleaned_count);
 			cleaned_count = 0;
 		}
@@ -4410,7 +4409,7 @@ next_desc:
 		rx_desc->status = 0;
 
 		/* return some buffers to hardware, one at a time is too slow */
-		if (unlikely(cleaned_count >= E1000_RX_BUFFER_WRITE)) {
+		if (unlikely(cleaned_count >= ((adapter->batching) ? E1000_RX_BUFFER_WRITE_BATCHING : E1000_RX_BUFFER_WRITE))) {
 			adapter->alloc_rx_buf(adapter, rx_ring, cleaned_count);
 			cleaned_count = 0;
 		}
