@@ -1,36 +1,5 @@
-/*******************************************************************************
-
-  Intel PRO/1000 Linux driver
-  Copyright(c) 1999 - 2006 Intel Corporation.
-
-  This program is free software; you can redistribute it and/or modify it
-  under the terms and conditions of the GNU General Public License,
-  version 2, as published by the Free Software Foundation.
-
-  This program is distributed in the hope it will be useful, but WITHOUT
-  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
-  more details.
-
-  You should have received a copy of the GNU General Public License along with
-  this program; if not, write to the Free Software Foundation, Inc.,
-  51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-
-  The full GNU General Public License is included in this distribution in
-  the file called "COPYING".
-
-  Contact Information:
-  Linux NICS <linux.nics@intel.com>
-  m1000-devel Mailing List <m1000-devel@lists.sourceforge.net>
-  Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
-
-*******************************************************************************/
-
-
-/* Linux PRO/1000 Ethernet Driver main header file */
-
-#ifndef _E1000_H_
-#define _E1000_H_
+#ifndef _M1000_H_
+#define _M1000_H_
 
 #include <linux/stddef.h>
 #include <linux/module.h>
@@ -70,30 +39,16 @@
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
 
+#include "m1000_emu.h"
 
 #define BAR_0		0
 #define BAR_1		1
-#define BAR_5		5
-
-struct m1000_descriptor {
-    uint64_t buffer_address;
-    uint32_t buffer_length;
-    uint32_t padding;
-};
-
-#define M1000_TX_ENABLED    1
-#define M1000_RX_ENABLED    2
-
-//#include "m1000_hw.h"
-
-/* this is the size past which hardware will drop packets when setting LPE=0 */
-#define MAXIMUM_ETHERNET_VLAN_SIZE 1522
 
 /* How many Tx Descriptors do we need to call netif_wake_queue ? */
-#define E1000_TX_QUEUE_WAKE	16
+#define M1000_TX_QUEUE_WAKE	16
 
 /* How many Rx Buffers do we bundle into one write to the hardware ? */
-#define E1000_RX_BUFFER_WRITE	16	/* Must be power of 2 */
+#define M1000_RX_BUFFER_WRITE	16	/* Must be power of 2 */
 
 /* wrapper around a pointer to a socket buffer,
  * so a DMA handle can be stored along with the buffer */
@@ -102,14 +57,11 @@ struct m1000_buffer {
 	dma_addr_t dma;
 	struct page *page;
 	unsigned long time_stamp;
-	u16 length;
-	u16 next_to_watch;
-	unsigned int segs;
-	unsigned int bytecount;
+	uint32_t length;
 	u16 mapped_as_page;
 };
 
-struct m1000_tx_ring {
+struct m1000_ring {
 	/* pointer to the descriptor ring memory */
 	struct m1000_descriptor *desc;
 	/* physical address of the descriptor ring */
@@ -117,7 +69,7 @@ struct m1000_tx_ring {
 	/* length of descriptor ring in bytes */
 	unsigned int size;
 	/* number of descriptors in the ring */
-	unsigned int count;
+	unsigned int length;
 	/* next descriptor to associate a buffer with */
 	unsigned int next_to_use;
 	/* next descriptor to check for DD status bit */
@@ -126,43 +78,14 @@ struct m1000_tx_ring {
 	struct m1000_buffer *buffer_info;
 };
 
-struct m1000_rx_ring {
-	/* pointer to the descriptor ring memory */
-	struct m1000_descriptor *desc;
-	/* physical address of the descriptor ring */
-	dma_addr_t dma;
-	/* length of descriptor ring in bytes */
-	unsigned int size;
-	/* number of descriptors in the ring */
-	unsigned int count;
-	/* next descriptor to associate a buffer with */
-	unsigned int next_to_use;
-	/* next descriptor to check for DD status bit */
-	unsigned int next_to_clean;
-	/* array of buffer information structs */
-	struct m1000_buffer *buffer_info;
-	struct sk_buff *rx_skb_top;
-
-	/* cpu for rx queue */
-	int cpu;
-
-	u16 rdh;
-	u16 rdt;
-};
-
-#define E1000_DESC_UNUSED(R)						\
+#define M1000_UNUSED_DESCRIPTORS(R)						\
 	((((R)->next_to_clean > (R)->next_to_use)			\
-	  ? 0 : (R)->count) + (R)->next_to_clean - (R)->next_to_use - 1)
+	  ? 0 : (R)->length) + (R)->next_to_clean - (R)->next_to_use - 1)
 
-#define E1000_RX_DESC_EXT(R, i)						\
-	(&(((union m1000_rx_desc_extended *)((R).desc))[i]))
-#define E1000_GET_DESC(R, i, type)	(&(((struct type *)((R).desc))[i]))
-#define E1000_RX_DESC(R, i)		E1000_GET_DESC(R, i, m1000_rx_desc)
-#define E1000_TX_DESC(R, i)		E1000_GET_DESC(R, i, m1000_tx_desc)
-#define E1000_CONTEXT_DESC(R, i)	E1000_GET_DESC(R, i, m1000_context_desc)
+
+#define M1000_CSB_SIZE 4096	// size of the communication status block
 
 /* board specific private data structure */
-
 struct m1000_adapter {
     unsigned int total_tx_bytes;
     unsigned int total_tx_packets;
@@ -170,20 +93,22 @@ struct m1000_adapter {
     unsigned int total_rx_packets;
 
     /* TX */
-    struct m1000_tx_ring *tx_ring;      /* One per active queue */
+    struct m1000_ring tx_ring;
     u32 tx_timeout_count;
 
     /* RX */
-    struct m1000_rx_ring *rx_ring;      /* One per active queue */
+    struct m1000_ring rx_ring;
     struct napi_struct napi;
+
+    uint32_t * csb;	    // communication status block
+    dma_addr_t csb_dma;	    // dma handle for the CSB
 
     /* OS defined structs */
     struct net_device *netdev;
     struct pci_dev *pdev;
 
-    /* structs defined in m1000_hw.h */
-    u8 __iomem *hw_addr;  // registers base address
-    u8 mac_addr[6];
+    u8 __iomem *hw_addr;  // register bank base address
+    u8 mac_addr[6];	  // board hardware address
 
     unsigned long flags;
 
@@ -194,25 +119,21 @@ struct m1000_adapter {
 };
 
 
-#undef pr_fmt
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+static int m1000_unused_tx_descriptors(struct m1000_adapter * adapter)
+{
+    struct m1000_ring * tx_ring = &adapter->tx_ring;
 
-#define e_err(msglvl, format, arg...) \
-	netif_err(adapter, msglvl, adapter->netdev, format, ## arg)
-#define e_info(msglvl, format, arg...) \
-	netif_info(adapter, msglvl, adapter->netdev, format, ## arg)
-#define e_warn(msglvl, format, arg...) \
-	netif_warn(adapter, msglvl, adapter->netdev, format, ## arg)
-#define e_notice(msglvl, format, arg...) \
-	netif_notice(adapter, msglvl, adapter->netdev, format, ## arg)
-#define e_dev_info(format, arg...) \
-	dev_info(&adapter->pdev->dev, format, ## arg)
-#define e_dev_warn(format, arg...) \
-	dev_warn(&adapter->pdev->dev, format, ## arg)
-#define e_dev_err(format, arg...) \
-	dev_err(&adapter->pdev->dev, format, ## arg)
+    return ((tx_ring->next_to_clean > adapter->csb[TXSNTU]) ? 0 : tx_ring->length) + tx_ring->next_to_clean - adapter->csb[TXSNTU] - 1;
+}
+/*
+static int m1000_unused_rx_descriptors(struct m1000_adapter * adapter)
+{
+    struct m1000_ring * rx_ring = &adapter->rx_ring;
 
+    return ((rx_ring->next_to_clean > adapter->csb[RXSNTU]) ? 0 : rx_ring->length) + rx_ring->next_to_clean - adapter->csb[RXSNTU] - 1;
+}
+*/
 
 extern void m1000_check_options(struct m1000_adapter *adapter);
 
-#endif /* _E1000_H_ */
+#endif /* _M1000_H_ */
