@@ -41,8 +41,8 @@
 
 #include "m1000_emu.h"
 
+
 #define BAR_0		0
-#define BAR_1		1
 
 /* How many Tx Descriptors do we need to call netif_wake_queue ? */
 #define M1000_TX_QUEUE_WAKE	16
@@ -52,18 +52,18 @@
 
 /* wrapper around a pointer to a socket buffer,
  * so a DMA handle can be stored along with the buffer */
-struct m1000_buffer {
+struct m1000_sk_buff {
 	struct sk_buff *skb;
 	dma_addr_t dma;
-	struct page *page;
-	unsigned long time_stamp;
+	//struct page *page;
+	//unsigned long time_stamp;
 	uint32_t length;
-	u16 mapped_as_page;
+	//u16 mapped_as_page;
 };
 
 struct m1000_ring {
 	/* pointer to the descriptor ring memory */
-	struct m1000_descriptor *desc;
+	struct m1000_descriptor *descriptor_array;
 	/* physical address of the descriptor ring */
 	dma_addr_t dma;
 	/* length of descriptor ring in bytes */
@@ -71,19 +71,14 @@ struct m1000_ring {
 	/* number of descriptors in the ring */
 	unsigned int length;
 	/* next descriptor to associate a buffer with */
-	unsigned int next_to_use;
+	//unsigned int next_to_use;
 	/* next descriptor to check for DD status bit */
-	unsigned int next_to_clean;
+	//unsigned int next_to_clean;
 	/* array of buffer information structs */
-	struct m1000_buffer *buffer_info;
+	struct m1000_sk_buff *mskb_array;
 };
 
-#define M1000_UNUSED_DESCRIPTORS(R)						\
-	((((R)->next_to_clean > (R)->next_to_use)			\
-	  ? 0 : (R)->length) + (R)->next_to_clean - (R)->next_to_use - 1)
-
-
-#define M1000_CSB_SIZE 4096	// size of the communication status block
+#define M1000_CSB_SIZE 4096
 
 /* board specific private data structure */
 struct m1000_adapter {
@@ -118,22 +113,6 @@ struct m1000_adapter {
     struct mutex mutex;
 };
 
-
-static int m1000_unused_tx_descriptors(struct m1000_adapter * adapter)
-{
-    struct m1000_ring * tx_ring = &adapter->tx_ring;
-
-    return ((tx_ring->next_to_clean > adapter->csb[TXSNTU]) ? 0 : tx_ring->length) + tx_ring->next_to_clean - adapter->csb[TXSNTU] - 1;
-}
-/*
-static int m1000_unused_rx_descriptors(struct m1000_adapter * adapter)
-{
-    struct m1000_ring * rx_ring = &adapter->rx_ring;
-
-    return ((rx_ring->next_to_clean > adapter->csb[RXSNTU]) ? 0 : rx_ring->length) + rx_ring->next_to_clean - adapter->csb[RXSNTU] - 1;
-}
-*/
-
-extern void m1000_check_options(struct m1000_adapter *adapter);
+//extern void m1000_check_options(struct m1000_adapter *adapter);
 
 #endif /* _M1000_H_ */
