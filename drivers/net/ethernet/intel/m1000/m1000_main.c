@@ -23,7 +23,7 @@ static const char m1000_copyright[] = "copyright";
 #define DD(fmt, args...) 
 
 #define DTXS() DD("TXSNTC = %d, TXHNTS = %d, TXSNTS = %d\n", adapter->csb[TXSNTC], adapter->csb[TXHNTS], adapter->csb[TXSNTS]);
-#define DRXS() DD("RXSNTR = %d, RXHNTR = %d, RXSNTP = %d\n", adapter->csb[RXSNTR], adapter->csb[RXHNTR], adapter->csb[RXSNTP]);
+#define DRXS() DD("RX1SNTR = %d, RX1HNTR = %d, RX1SNTP = %d\n", adapter->csb[RX1SNTR], adapter->csb[RX1HNTR], adapter->csb[RX1SNTP]);
 
 
 static void mmio_write32(struct m1000_adapter * adapter, int index, uint32_t value)
@@ -48,6 +48,10 @@ MODULE_DEVICE_TABLE(pci, m1000_pci_tbl);
 
 static int m1000_alloc_ring(struct m1000_adapter *adapter, struct m1000_ring * ring);
 static void m1000_free_ring(struct m1000_adapter *adapter, struct m1000_ring * ring);
+static int m1000_alloc_ringbuffer(struct m1000_adapter * adapter,
+				    struct m1000_ringbuffer * ring);
+static void m1000_free_ringbuffer(struct m1000_adapter * adapter,
+				    struct m1000_ringbuffer * ring);
 static int m1000_init_module(void);
 static void m1000_exit_module(void);
 static int m1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
@@ -62,6 +66,8 @@ static struct net_device_stats * m1000_get_stats(struct net_device *netdev);
 static irqreturn_t m1000_intr(int irq, void *data);
 static bool m1000_clean_tx_ring(struct m1000_adapter *adapter);
 static int m1000_clean(struct napi_struct *napi, int budget);
+static bool m1000_receive_from_rx0_ring(struct m1000_adapter *adapter,
+	int *work_done, int work_to_do);
 static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
 	int *work_done, int work_to_do);
 static void m1000_tx_timeout(struct net_device *dev);
@@ -238,7 +244,7 @@ static int __devinit m1000_probe(struct pci_dev *pdev,
     netdev->netdev_ops = &m1000_netdev_ops;
     //m1000_set_ethtool_ops(netdev);
     netdev->watchdog_timeo = 10 * HZ;
-    netif_napi_add(netdev, &adapter->napi, m1000_clean, 512);
+    netif_napi_add(netdev, &adapter->napi, m1000_clean, 128);
 
     strncpy(netdev->name, pci_name(pdev), sizeof(netdev->name) - 1);
 
@@ -334,6 +340,7 @@ static int m1000_open(struct net_device *netdev)
     struct m1000_adapter *adapter = netdev_priv(netdev);
     struct m1000_ring * tx_ring = &adapter->tx_ring;
     struct m1000_ring * rx_ring = &adapter->rx_ring;
+    struct m1000_ringbuffer * rx0_ring = &adapter->rx0_ring;
     int err;
 
     netif_carrier_off(netdev);
@@ -348,6 +355,11 @@ static int m1000_open(struct net_device *netdev)
     if ((err = m1000_alloc_ring(adapter, rx_ring)))
 	goto err_alloc_rx_ring;
 
+    /* allocate the rx0 ringbuffer */
+    rx0_ring->size = 512 * 256;
+    if ((err = m1000_alloc_ringbuffer(adapter, rx0_ring)))
+	goto err_alloc_rx0_ring;
+
     /* allocate the Communication Status Block */
     adapter->csb = dma_alloc_coherent(&adapter->pdev->dev, M1000_CSB_SIZE,
 			&adapter->csb_dma, GFP_KERNEL);
@@ -356,22 +368,28 @@ static int m1000_open(struct net_device *netdev)
 	goto err_alloc_csb;
     }
 
-    //mmio_write32(adapter, CTRL, 0);  // disable m1000 tx/rx
-    //m1000_irq_disable(adapter);
-
     /* initialize the Communication Status Block */
-    adapter->csb[RXSNTR] = adapter->csb[RXHNTR] = adapter->csb[RXSNTP] = 0;
+    adapter->csb[RX0SNTR] = adapter->csb[RX0HNTR] = 0;
+    adapter->csb[RX1SNTR] = adapter->csb[RX1HNTR] = adapter->csb[RX1SNTP] = 0;
     adapter->csb[TXSNTC] = adapter->csb[TXHNTS] = adapter->csb[TXSNTS] = 0;
+
+    mmio_write32(adapter, RXRTH, 128);
 
     /* initialize all the registers containing addresses and lengths */
     mmio_write32(adapter, CSBBAH, (adapter->csb_dma >> 32));
     mmio_write32(adapter, CSBBAL, (adapter->csb_dma & 0x00000000ffffffffULL));
+
+    mmio_write32(adapter, RX0RBAH, (rx0_ring->buffer_dma >> 32));
+    mmio_write32(adapter, RX0RBAL, (rx0_ring->buffer_dma & 0x00000000ffffffffULL));
+    mmio_write32(adapter, RX0RSZ, rx0_ring->size);
+
+    mmio_write32(adapter, RX1RLEN, rx_ring->length);
+    mmio_write32(adapter, RX1RBAH, (rx_ring->dma >> 32));
+    mmio_write32(adapter, RX1RBAL, (rx_ring->dma & 0x00000000ffffffffULL));
+
     mmio_write32(adapter, TXRLEN, tx_ring->length);
     mmio_write32(adapter, TXRBAH, (tx_ring->dma >> 32));
     mmio_write32(adapter, TXRBAL, (tx_ring->dma & 0x00000000ffffffffULL));
-    mmio_write32(adapter, RXRLEN, rx_ring->length);
-    mmio_write32(adapter, RXRBAH, (rx_ring->dma >> 32));
-    mmio_write32(adapter, RXRBAL, (rx_ring->dma & 0x00000000ffffffffULL));
 
     m1000_prepare_rx_buffers(adapter);
     DRXS();
@@ -397,9 +415,11 @@ static int m1000_open(struct net_device *netdev)
 err_req_irq:	
     dma_free_coherent(&adapter->pdev->dev, M1000_CSB_SIZE, adapter->csb, adapter->csb_dma);
 err_alloc_csb:
-    m1000_free_ring(adapter, tx_ring);
-err_alloc_rx_ring:
+    m1000_free_ringbuffer(adapter, rx0_ring);
+err_alloc_rx0_ring:
     m1000_free_ring(adapter, rx_ring);
+err_alloc_rx_ring:
+    m1000_free_ring(adapter, tx_ring);
 err_alloc_tx_ring:
 
     return err;
@@ -429,17 +449,39 @@ static int m1000_close(struct net_device *netdev)
     m1000_irq_disable(adapter);
 
     netif_carrier_off(netdev);
-    m1000_reset_tx_ring(adapter);
     m1000_reset_rx_ring(adapter);
+    m1000_reset_tx_ring(adapter);
 
     m1000_free_irq(adapter);
 
-    dma_free_coherent(&adapter->pdev->dev, M1000_CSB_SIZE, adapter->csb, adapter->csb_dma);
-    m1000_free_ring(adapter, &adapter->tx_ring);
+    dma_free_coherent(&adapter->pdev->dev, M1000_CSB_SIZE, adapter->csb,
+			adapter->csb_dma);
+    m1000_free_ringbuffer(adapter, &adapter->rx0_ring);
     m1000_free_ring(adapter, &adapter->rx_ring);
+    m1000_free_ring(adapter, &adapter->tx_ring);
     DD("close finished\n");
 
     return 0;
+}
+
+static int m1000_alloc_ringbuffer(struct m1000_adapter * adapter,
+				    struct m1000_ringbuffer * ring)
+{
+    ring->buffer = dma_alloc_coherent(&adapter->pdev->dev, ring->size,
+			&ring->buffer_dma, GFP_KERNEL);
+    if (!ring->buffer) {
+	D("ringbuffer allocation failed\n");
+	return -ENOMEM;
+    }
+
+    return 0;
+}
+
+static void m1000_free_ringbuffer(struct m1000_adapter * adapter,
+				    struct m1000_ringbuffer * ring)
+{
+    dma_free_coherent(&adapter->pdev->dev, ring->size, ring->buffer,
+			ring->buffer_dma);
 }
 
 /**
@@ -589,8 +631,8 @@ static void m1000_reset_rx_ring(struct m1000_adapter *adapter)
     /* Zero out the descriptor ring */
     memset(rx_ring->descriptor_array, 0, rx_ring->size);
 
-    adapter->csb[RXSNTR] = 0;
-    adapter->csb[RXSNTP] = 0;
+    adapter->csb[RX1SNTR] = 0;
+    adapter->csb[RX1SNTP] = 0;
 
     /*
        writel(0, hw->hw_addr + rx_ring->rdh);
@@ -779,6 +821,7 @@ static int m1000_clean(struct napi_struct *napi, int budget)
     
     DTXS(); DRXS();
     tx_clean_complete = m1000_clean_tx_ring(adapter);
+    m1000_receive_from_rx0_ring(adapter, &work_done, budget);
     m1000_receive_from_rx_ring(adapter, &work_done, budget);
     DTXS(); DRXS();
 
@@ -852,6 +895,80 @@ static bool m1000_clean_tx_ring(struct m1000_adapter *adapter)
     return count < tx_ring->length; /* haven't cleaned every descriptor in the ring */
 }
 
+static bool m1000_receive_from_rx0_ring(struct m1000_adapter *adapter,
+	int *work_done, int work_to_do)
+{
+    struct net_device *netdev = adapter->netdev;
+    struct m1000_ringbuffer *rx0_ring = &adapter->rx0_ring;
+    uint32_t length;
+    unsigned int i;
+    int tail_space;
+    int count = 0;
+    unsigned int total_rx_bytes = 0, total_rx_packets = 0;
+    int err;
+
+    //i = rx_ring->next_to_clean;
+    i = adapter->csb[RX0SNTR];
+
+    while (i != adapter->csb[RX0HNTR]) {
+	struct sk_buff *skb;
+
+	if (*work_done >= work_to_do)
+	    break;
+	(*work_done)++;
+	rmb(); /* read from the ringbuffer after RX0HNTR */
+
+	if (unlikely(rx0_ring->size - i < 4))
+	    i = 0;
+	length = le32_to_cpu(*((uint32_t *)(rx0_ring->buffer + i)));
+	i += 4;
+	prefetch(rx0_ring->buffer + i);
+	DD("size = %d\n", length);
+	skb = netdev_alloc_skb(netdev, length);
+	if (!skb) {
+	    D("rx0 skb allocation failed\n");
+	    break;
+	}
+	tail_space = rx0_ring->size - i;
+	if (length > tail_space) {
+	    if (tail_space)
+		skb_copy_to_linear_data_offset(skb, 0, rx0_ring->buffer + i,
+						tail_space);
+	    skb_copy_to_linear_data_offset(skb, tail_space, rx0_ring->buffer,
+						    length - tail_space);
+	    i = length - tail_space;
+	    
+	} else {
+	    skb_copy_to_linear_data_offset(skb, 0, rx0_ring->buffer + i,
+						length);
+	    i += length;
+	}
+	skb_put(skb, length);
+
+	count++;
+	total_rx_bytes += length;
+	total_rx_packets++;
+
+	/* It must be a TCP or UDP packet with a valid checksum */
+	skb->ip_summed = CHECKSUM_UNNECESSARY;  // don't check
+
+	skb->protocol = eth_type_trans(skb, adapter->netdev);
+	err = netif_receive_skb(skb);
+	if (err != NET_RX_SUCCESS)
+	    D("rx packet dropped!!\n");
+    }
+
+    adapter->csb[RX0SNTR] = i;
+
+    DD("received %d packets\n", count);
+
+    adapter->total_rx_packets += total_rx_packets;
+    adapter->total_rx_bytes += total_rx_bytes;
+    netdev->stats.rx_bytes += total_rx_bytes;
+    netdev->stats.rx_packets += total_rx_packets;
+    return true;
+}
+
 /**
  * m1000_receive_from_rx_ring - Send received data up the network stack; legacy
  * @adapter: board private structure
@@ -874,17 +991,17 @@ static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
     int err;
 
     //i = rx_ring->next_to_clean;
-    i = adapter->csb[RXSNTR];
+    i = adapter->csb[RX1SNTR];
     rx_desc = &rx_ring->descriptor_array[i];
     mskb = &rx_ring->mskb_array[i];
 
-    while (i != adapter->csb[RXHNTR]) {
+    while (i != adapter->csb[RX1HNTR]) {
 	struct sk_buff *skb;
 
 	if (*work_done >= work_to_do)
 	    break;
 	(*work_done)++;
-	rmb(); /* read descriptor and rx_mskb after RXHNTR */
+	rmb(); /* read descriptor and rx_mskb after RX1HNTR */
 
 	skb = mskb->skb;
 	mskb->skb = NULL;
@@ -898,32 +1015,31 @@ static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
 
 	next_mskb = &rx_ring->mskb_array[i];
 
+	length = le32_to_cpu(rx_desc->buffer_length);
+	DD("rx buffer address = %016llx, size = %d\n", mskb->dma, length);
+
 	dma_unmap_single(&pdev->dev, mskb->dma,
 		mskb->length, DMA_FROM_DEVICE);
 	mskb->dma = 0;
 
-	length = le32_to_cpu(rx_desc->buffer_length);
 
-	//process_skb:
 	/* adjust length to remove Ethernet CRC 
 	if (likely(!(netdev->features & NETIF_F_RXFCS)))
 	    length -= 4; */
-
-	total_rx_bytes += length; /* don't count FCS */
+	total_rx_bytes += length;
 	total_rx_packets++;
 
 	skb_put(skb, length);
 
-	skb_checksum_none_assert(skb);
+	//skb_checksum_none_assert(skb);
 	/* TCP/UDP Checksum has not been calculated */
 
 	/* It must be a TCP or UDP packet with a valid checksum */
-	/* TCP checksum is good */
-	//skb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb->ip_summed = CHECKSUM_UNNECESSARY;  // don't check
 
 	skb->protocol = eth_type_trans(skb, adapter->netdev);
 	//napi_gro_receive(&adapter->napi, skb);
-	err = netif_rx(skb); // netif_rx_ni(skb);
+	err = netif_receive_skb(skb); // netif_rx_ni(skb);
 	if (err != NET_RX_SUCCESS)
 	    D("rx packet dropped!!\n");
 
@@ -932,12 +1048,12 @@ static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
 	mskb = next_mskb;
     }
     //rx_ring->next_to_clean = i;
-    adapter->csb[RXSNTR] = i;
+    adapter->csb[RX1SNTR] = i;
 
     if (count)
 	m1000_prepare_rx_buffers(adapter);
 
-    D("received %d packets\n", count);
+    DD("received %d packets\n", count);
 
     adapter->total_rx_packets += total_rx_packets;
     adapter->total_rx_bytes += total_rx_bytes;
@@ -960,19 +1076,19 @@ static void m1000_prepare_rx_buffers(struct m1000_adapter *adapter)
     struct m1000_sk_buff *mskb;
     struct sk_buff *skb;
     unsigned int i;
-    unsigned int bufsz = 4096;
+    unsigned int bufsz = 1522;
     int desc_to_prepare;
 
     /* prepare all the free descriptors (except the last, so that we
        can get the difference between "empty" and "full" */
-    desc_to_prepare = adapter->csb[RXSNTR] - adapter->csb[RXSNTP] - 1;
+    desc_to_prepare = adapter->csb[RX1SNTR] - adapter->csb[RX1SNTP] - 1;
     if (desc_to_prepare < 0)
 	desc_to_prepare += rx_ring->length;
     if (desc_to_prepare == 0) // TODO should never happen
 	return;
 
     //i = rx_ring->next_to_use;
-    i = adapter->csb[RXSNTP];
+    i = adapter->csb[RX1SNTP];
     mskb = &rx_ring->mskb_array[i];
 
     while (desc_to_prepare--) {
@@ -1013,9 +1129,9 @@ map_skb:
 	mskb = &rx_ring->mskb_array[i];
     }
 
-    if (likely(adapter->csb[RXSNTP] != i)) { //TODO should be always true
+    if (likely(adapter->csb[RX1SNTP] != i)) { //TODO should be always true
 	//rx_ring->next_to_use = i;
-	adapter->csb[RXSNTP] = i;
+	adapter->csb[RX1SNTP] = i;
 	/* Force memory writes to complete before letting h/w
 	 * know there are new descriptors to fetch.  (Only
 	 * applicable for weak-ordered memory model archs,

@@ -80,6 +80,12 @@ struct m1000_ring {
 
 #define M1000_CSB_SIZE 4096
 
+struct m1000_ringbuffer {
+    char * buffer;
+    int size;
+    dma_addr_t buffer_dma;
+};
+
 /* board specific private data structure */
 struct m1000_adapter {
     unsigned int total_tx_bytes;
@@ -94,6 +100,9 @@ struct m1000_adapter {
     /* RX */
     struct m1000_ring rx_ring;
     struct napi_struct napi;
+
+    /* RX ringbuffer */
+    struct m1000_ringbuffer rx0_ring;
 
     uint32_t * csb;	    // communication status block
     dma_addr_t csb_dma;	    // dma handle for the CSB
