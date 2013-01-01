@@ -121,7 +121,7 @@ module_init(m1000_init_module);
 static void __exit m1000_exit_module(void)
 {
     pci_unregister_driver(&m1000_driver);
-    printk(BANNER "Module unloaded");
+    printk(BANNER "Module unloaded\n");
 }
 
 module_exit(m1000_exit_module);
@@ -408,7 +408,7 @@ static int m1000_open(struct net_device *netdev)
 
     netif_carrier_on(netdev);
     netif_start_queue(netdev);
-    DD("open finished\n");
+    D("open finished\n");
 
     return 0;
 
@@ -442,13 +442,13 @@ static int m1000_close(struct net_device *netdev)
     struct m1000_adapter *adapter = netdev_priv(netdev);
 
     netif_tx_disable(netdev);
-
-    napi_disable(&adapter->napi);
+    netif_carrier_off(netdev);
 
     mmio_write32(adapter, CTRL, 0);
     m1000_irq_disable(adapter);
 
-    netif_carrier_off(netdev);
+    napi_disable(&adapter->napi);
+
     m1000_reset_rx_ring(adapter);
     m1000_reset_tx_ring(adapter);
 
@@ -459,7 +459,7 @@ static int m1000_close(struct net_device *netdev)
     m1000_free_ringbuffer(adapter, &adapter->rx0_ring);
     m1000_free_ring(adapter, &adapter->rx_ring);
     m1000_free_ring(adapter, &adapter->tx_ring);
-    DD("close finished\n");
+    D("close finished\n");
 
     return 0;
 }
@@ -791,7 +791,7 @@ static irqreturn_t m1000_intr(int irq, void *data)
     mmio_write32(adapter, NTFY, M1000_NTFY_IC);
 
     /* disable interrupts, without the synchronize_irq bit */ 
-    mmio_write32(adapter, IE, 0);
+    //mmio_write32(adapter, IE, 0);
 
     if (likely(napi_schedule_prep(&adapter->napi))) {
 	adapter->total_tx_bytes = 0;
@@ -1092,12 +1092,6 @@ static void m1000_prepare_rx_buffers(struct m1000_adapter *adapter)
     mskb = &rx_ring->mskb_array[i];
 
     while (desc_to_prepare--) {
-	skb = mskb->skb;
-	if (skb) {
-	    skb_trim(skb, 0);
-	    goto map_skb;
-	}
-
 	skb = netdev_alloc_skb_ip_align(netdev, bufsz);
 	if (unlikely(!skb)) {
 	    /* Better luck next round */
@@ -1108,7 +1102,6 @@ static void m1000_prepare_rx_buffers(struct m1000_adapter *adapter)
 
 	mskb->skb = skb;
 	mskb->length = bufsz;
-map_skb:
 	mskb->dma = dma_map_single(&pdev->dev, skb->data, mskb->length,
 					DMA_FROM_DEVICE);
 	if (dma_mapping_error(&pdev->dev, mskb->dma)) {
@@ -1122,7 +1115,6 @@ map_skb:
 
 	rx_desc = &rx_ring->descriptor_array[i];
 	rx_desc->buffer_address = cpu_to_le64(mskb->dma);
-	rx_desc->buffer_length = 0;  // INUTILE
 
 	if (unlikely(++i == rx_ring->length))
 	    i = 0;
@@ -1130,14 +1122,8 @@ map_skb:
     }
 
     if (likely(adapter->csb[RX1SNTP] != i)) { //TODO should be always true
-	//rx_ring->next_to_use = i;
-	adapter->csb[RX1SNTP] = i;
-	/* Force memory writes to complete before letting h/w
-	 * know there are new descriptors to fetch.  (Only
-	 * applicable for weak-ordered memory model archs,
-	 * such as IA-64). */
 	wmb();
-	mmio_write32(adapter, NTFY, M1000_NTFY_RXD);
+	adapter->csb[RX1SNTP] = i;
     }
 }
 
