@@ -38,6 +38,7 @@
 #include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
+#include <linux/hrtimer.h>
 
 #include "m1000_emu.h"
 
@@ -120,6 +121,9 @@ struct m1000_adapter {
     int bars;
 
     struct mutex mutex;
+    struct hrtimer timer;
+    unsigned int mit_delay;
+    volatile unsigned long tasvar;
 };
 
 //extern void m1000_check_options(struct m1000_adapter *adapter);

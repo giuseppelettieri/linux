@@ -8,6 +8,7 @@ m1000 paravirtual driver
 #include <linux/prefetch.h>
 #include <linux/bitops.h>
 #include <linux/if_vlan.h>
+#include <linux/bitops.h>
 
 #include "m1000.h"
 
@@ -26,26 +27,25 @@ static const char m1000_copyright[] = "copyright";
 #define DRXS() DD("RX1SNTR = %d, RX1HNTR = %d, RX1SNTP = %d\n", adapter->csb[RX1SNTR], adapter->csb[RX1HNTR], adapter->csb[RX1SNTP]);
 
 
-static void mmio_write32(struct m1000_adapter * adapter, int index, uint32_t value)
+/****************** MODULE PARAMETERS *************************************/
+#define MIT_DELAY_THRESHOLD 5000  // if mit_delay is less than that, we don't turn the interrupt mitigation on
+static unsigned int mit_delay __read_mostly = 150000;
+module_param(mit_delay, uint, 0644);
+MODULE_PARM_DESC(mit_delay, "Minimum time between two interrupts (in nanoseconds)");
+/*========================================================================*/
+
+static inline void mmio_write32(struct m1000_adapter * adapter, int index, uint32_t value)
 {
     writel(cpu_to_le32(value), adapter->hw_addr + index * 4);
 }
 
-static uint32_t mmio_read32(struct m1000_adapter * adapter, int index)
+static inline uint32_t mmio_read32(struct m1000_adapter * adapter, int index)
 {
     return le32_to_cpu(readl(adapter->hw_addr + index * 4));
 }
 
-/* m1000_pci_tbl - PCI Device ID Table
-*/
-static DEFINE_PCI_DEVICE_TABLE(m1000_pci_tbl) = {
-    { 0x9999, PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
-    /* last entry must be all 0s */
-    {0,}
-};
 
-MODULE_DEVICE_TABLE(pci, m1000_pci_tbl);
-
+/*********************** PROTOTYPES ***************************************/
 static int m1000_alloc_ring(struct m1000_adapter *adapter, struct m1000_ring * ring);
 static void m1000_free_ring(struct m1000_adapter *adapter, struct m1000_ring * ring);
 static int m1000_alloc_ringbuffer(struct m1000_adapter * adapter,
@@ -71,10 +71,18 @@ static bool m1000_receive_from_rx0_ring(struct m1000_adapter *adapter,
 static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
 	int *work_done, int work_to_do);
 static void m1000_tx_timeout(struct net_device *dev);
-
 static void m1000_prepare_rx_buffers(struct m1000_adapter *adapter);
+/*=======================================================================*/
 
 
+/* Declare what PCI devices this module drives */
+static DEFINE_PCI_DEVICE_TABLE(m1000_pci_tbl) = {
+    { 0x9999, PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+    /* last entry must be all 0s */
+    {0,}
+};
+
+MODULE_DEVICE_TABLE(pci, m1000_pci_tbl);
 static struct pci_driver m1000_driver = {
     .name     = m1000_driver_name,
     .id_table = m1000_pci_tbl,
@@ -169,19 +177,32 @@ static void m1000_irq_enable(struct m1000_adapter *adapter)
     mmio_write32(adapter, IE, 1);
 }
 
+static struct m1000_adapter * gap;  // ugly, but the timer callback needs it
+
+static enum hrtimer_restart timer_callback(struct hrtimer * timer)
+{
+    struct m1000_adapter * adapter = gap;
+
+    /* if napi work is done, reenable interrupts */
+    if (test_and_set_bit(1, &adapter->tasvar)) {
+	m1000_irq_enable(adapter);
+    }
+    return HRTIMER_NORESTART;
+}
+
 static const struct net_device_ops m1000_netdev_ops = {
-    .ndo_open		= m1000_open,
-    .ndo_stop		= m1000_close,
+    .ndo_open			= m1000_open,
+    .ndo_stop			= m1000_close,
     .ndo_start_xmit		= m1000_start_xmit,
     .ndo_get_stats		= m1000_get_stats,
-    //.ndo_set_rx_mode	= m1000_set_rx_mode,
+    //.ndo_set_rx_mode		= m1000_set_rx_mode,
     //.ndo_set_mac_address	= m1000_set_mac,
     .ndo_tx_timeout		= m1000_tx_timeout,
     //.ndo_change_mtu		= m1000_change_mtu,
     //d.ndo_do_ioctl		= m1000_ioctl,
-    .ndo_validate_addr	= eth_validate_addr,
-    //.ndo_fix_features	= m1000_fix_features,
-    //.ndo_set_features	= m1000_set_features,
+    .ndo_validate_addr		= eth_validate_addr,
+    //.ndo_fix_features		= m1000_fix_features,
+    //.ndo_set_features		= m1000_set_features,
 };
 
 /**
@@ -253,6 +274,9 @@ static int __devinit m1000_probe(struct pci_dev *pdev,
     mmio_write32(adapter, CTRL, 0);
 
     mutex_init(&adapter->mutex);
+    gap = adapter;
+    hrtimer_init(&adapter->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+    adapter->timer.function = &timer_callback;
 
     /* at this point netdev->features = netdev->hw_features = 0 */
     netdev->hw_features |= NETIF_F_RXALL;
@@ -786,12 +810,21 @@ static irqreturn_t m1000_intr(int irq, void *data)
 {
     struct net_device *netdev = data;
     struct m1000_adapter *adapter = netdev_priv(netdev);
+    ktime_t delay;
 
     DD("interrupt received\n");
     mmio_write32(adapter, NTFY, M1000_NTFY_IC);
 
     /* disable interrupts, without the synchronize_irq bit */ 
     //mmio_write32(adapter, IE, 0);
+
+    adapter->mit_delay = mit_delay;  // coherent snapshot
+    if (adapter->mit_delay >= MIT_DELAY_THRESHOLD) {
+	/* If interrupt mitigation is on, we start a timer */
+	adapter->tasvar = 0;
+	delay = ktime_set(0, adapter->mit_delay);
+	hrtimer_start(&adapter->timer, delay, HRTIMER_MODE_REL);
+    }
 
     if (likely(napi_schedule_prep(&adapter->napi))) {
 	adapter->total_tx_bytes = 0;
@@ -830,7 +863,21 @@ static int m1000_clean(struct napi_struct *napi, int budget)
     /* If budget not fully consumed, exit the polling mode */
     if (work_done < budget) {
 	napi_complete(napi);
-	m1000_irq_enable(adapter);
+
+	if (adapter->mit_delay < MIT_DELAY_THRESHOLD) {
+	    /* Interrupt mitigation is off, so we just have to
+	       enable interrupts. */
+	    m1000_irq_enable(adapter);
+	}
+	else {
+	    /* Interrupt mitigation is on.
+	       If the timer is already expired we have to enable 
+	       the interrupts,
+	       because the timer callback didn't enable them. */
+	    if (test_and_set_bit(1, &adapter->tasvar)) {
+		m1000_irq_enable(adapter);
+	    }
+	}
     }
 
     return work_done;
