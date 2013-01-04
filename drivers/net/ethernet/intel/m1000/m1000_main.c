@@ -27,12 +27,21 @@ static const char m1000_copyright[] = "copyright";
 #define DRXS() DD("RX1SNTR = %d, RX1HNTR = %d, RX1SNTP = %d\n", adapter->csb[RX1SNTR], adapter->csb[RX1HNTR], adapter->csb[RX1SNTP]);
 
 
-/****************** MODULE PARAMETERS *************************************/
-#define MIT_DELAY_THRESHOLD 5000  // if mit_delay is less than that, we don't turn the interrupt mitigation on
+/* =====================    MODULE PARAMETERS     ======================= */
+#define MIT_DELAY_MIN 5000  // if mit_delay is less than that, we don't turn the interrupt mitigation on
 static unsigned int mit_delay __read_mostly = 150000;
 module_param(mit_delay, uint, 0644);
 MODULE_PARM_DESC(mit_delay, "Minimum time between two interrupts (in nanoseconds)");
-/*========================================================================*/
+
+#define UAL_DELAY_MIN 10000000  // if ual_delay is less than that, we don't turn on the UAL mechanism
+static unsigned int ual_delay __read_mostly = 200000000;
+module_param(ual_delay, uint, 0644);
+MODULE_PARM_DESC(ual_delay, "Udp-Anti-Livelock timer interval (in nanoseconds)");
+#define UAL_THRESHOLD_MIN 3
+static unsigned int ual_threshold __read_mostly = 30;
+module_param(ual_threshold, uint, 0644);
+MODULE_PARM_DESC(ual_threshold, "Udp-Anti-Livelock drop threshold (in %)");
+/* ====================================================================== */
 
 static inline void mmio_write32(struct m1000_adapter * adapter, int index, uint32_t value)
 {
@@ -44,8 +53,46 @@ static inline uint32_t mmio_read32(struct m1000_adapter * adapter, int index)
     return le32_to_cpu(readl(adapter->hw_addr + index * 4));
 }
 
+/* ============================    UAL   ================================ */
+void ual_update_delay(struct m1000_adapter * adapter)
+{
+    if (ual_delay != adapter->ual_delay ||
+		ual_threshold != adapter->ual_threshold) {
+	if (ual_delay < UAL_DELAY_MIN)
+	    ual_delay = UAL_DELAY_MIN;
+	adapter->ual_delay = ual_delay;
+	/* We choose to match the driver UAL timer interval with the
+	   hardware UAL timer interval */
+	mmio_write32(adapter, UALTMR, adapter->ual_delay/1000000);
 
-/*********************** PROTOTYPES ***************************************/
+	if (ual_threshold < UAL_THRESHOLD_MIN)
+	    ual_threshold = UAL_THRESHOLD_MIN;
+	else if (ual_threshold > 99)
+	    ual_threshold = 99;
+	adapter->ual_threshold = ual_threshold;
+	mmio_write32(adapter, UALDTH, adapter->ual_threshold);
+    } 
+}
+
+void ual_init(struct m1000_adapter * adapter)
+{
+    /* Must be called in process context */
+    adapter->snmp_mib = &current->nsproxy->net_ns->mib;
+    adapter->ual_delay = 0;  // trigger the update
+    ual_update_delay(adapter);
+}
+
+unsigned long ual_get_udp_statistic(struct m1000_adapter * adapter,
+					int statistic)
+{
+    return snmp_fold_field(
+		    (void __percpu **)adapter->snmp_mib->udp_statistics,
+			statistic);
+}
+/* ====================================================================== */
+
+
+/* ========================      PROTOTYPES      ======================== */
 static int m1000_alloc_ring(struct m1000_adapter *adapter, struct m1000_ring * ring);
 static void m1000_free_ring(struct m1000_adapter *adapter, struct m1000_ring * ring);
 static int m1000_alloc_ringbuffer(struct m1000_adapter * adapter,
@@ -177,17 +224,45 @@ static void m1000_irq_enable(struct m1000_adapter *adapter)
     mmio_write32(adapter, IE, 1);
 }
 
-static struct m1000_adapter * gap;  // ugly, but the timer callback needs it
+static struct m1000_adapter * gap;  // ugly, but the mit_timer callback needs it
 
-static enum hrtimer_restart timer_callback(struct hrtimer * timer)
+static enum hrtimer_restart mit_timer_callback(struct hrtimer * timer)
 {
     struct m1000_adapter * adapter = gap;
 
     /* if napi work is done, reenable interrupts */
-    if (test_and_set_bit(1, &adapter->tasvar)) {
+    if (test_and_set_bit(1, &adapter->mit_tasvar)) {
 	m1000_irq_enable(adapter);
     }
     return HRTIMER_NORESTART;
+}
+
+static enum hrtimer_restart ual_timer_callback(struct hrtimer * timer)
+{
+    struct m1000_adapter * adapter = gap;
+    unsigned long indatagrams;
+    unsigned long inerrors;
+    unsigned long rcvbuferrors;
+    ktime_t kdelay;
+
+    indatagrams = ual_get_udp_statistic(adapter, UDP_MIB_INDATAGRAMS);
+    inerrors = ual_get_udp_statistic(adapter, UDP_MIB_INERRORS);
+    rcvbuferrors = ual_get_udp_statistic(adapter, UDP_MIB_RCVBUFERRORS);
+    if (inerrors != adapter->ual_inerrors || indatagrams != adapter->ual_indatagrams) {
+	adapter->csb[UALDRP] = (100 * (inerrors - adapter->ual_inerrors)) / (inerrors - adapter->ual_inerrors + indatagrams - adapter->ual_indatagrams);
+
+	adapter->ual_indatagrams = indatagrams;
+	adapter->ual_inerrors = inerrors;
+	adapter->ual_rcvbuferrors = rcvbuferrors;
+    } 
+    else
+	adapter->csb[UALDRP] = 0;
+
+    ual_update_delay(adapter);
+    kdelay = ktime_set(0, adapter->ual_delay);
+    hrtimer_forward_now(timer, kdelay);
+
+    return HRTIMER_RESTART;
 }
 
 static const struct net_device_ops m1000_netdev_ops = {
@@ -275,8 +350,10 @@ static int __devinit m1000_probe(struct pci_dev *pdev,
 
     mutex_init(&adapter->mutex);
     gap = adapter;
-    hrtimer_init(&adapter->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-    adapter->timer.function = &timer_callback;
+    hrtimer_init(&adapter->mit_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+    adapter->mit_timer.function = &mit_timer_callback;
+    hrtimer_init(&adapter->ual_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+    adapter->ual_timer.function = &ual_timer_callback;
 
     /* at this point netdev->features = netdev->hw_features = 0 */
     netdev->hw_features |= NETIF_F_RXALL;
@@ -366,6 +443,7 @@ static int m1000_open(struct net_device *netdev)
     struct m1000_ring * rx_ring = &adapter->rx_ring;
     struct m1000_ringbuffer * rx0_ring = &adapter->rx0_ring;
     int err;
+    ktime_t ual_kdelay;
 
     netif_carrier_off(netdev);
 
@@ -434,6 +512,16 @@ static int m1000_open(struct net_device *netdev)
     netif_start_queue(netdev);
     D("open finished\n");
 
+    /* prepare the UAL and start the UAL timer */
+    ual_init(adapter);
+    ual_kdelay = ktime_set(0, adapter->ual_delay);
+    hrtimer_start(&adapter->ual_timer, ual_kdelay, HRTIMER_MODE_REL);
+    printk("Udp in datagrams %ld\n", ual_get_udp_statistic(adapter,
+						    UDP_MIB_INDATAGRAMS));
+    printk("Udp in errors %ld\n", ual_get_udp_statistic(adapter,
+						    UDP_MIB_INERRORS));
+    printk("Udp rcvbuf errors %ld\n", ual_get_udp_statistic(adapter,
+						    UDP_MIB_RCVBUFERRORS));
     return 0;
 
 err_req_irq:	
@@ -472,6 +560,9 @@ static int m1000_close(struct net_device *netdev)
     m1000_irq_disable(adapter);
 
     napi_disable(&adapter->napi);
+
+    hrtimer_cancel(&adapter->mit_timer);
+    hrtimer_cancel(&adapter->ual_timer);
 
     m1000_reset_rx_ring(adapter);
     m1000_reset_tx_ring(adapter);
@@ -597,7 +688,6 @@ static void m1000_reset_tx_ring(struct m1000_adapter *adapter)
     unsigned int i;
 
     /* Free all the Tx ring sk_buffs */
-
     for (i = 0; i < tx_ring->length; i++) {
 	mskb = &tx_ring->mskb_array[i];
 	m1000_unmap_and_free_tx_buffer(adapter, mskb);
@@ -608,15 +698,10 @@ static void m1000_reset_tx_ring(struct m1000_adapter *adapter)
     memset(tx_ring->mskb_array, 0, size);
 
     /* Zero out the descriptor ring */
-
     memset(tx_ring->descriptor_array, 0, tx_ring->size);
 
     adapter->csb[TXSNTS] = 0;
     adapter->csb[TXSNTC] = 0;
-
-    /*
-       writel(0, hw->hw_addr + tx_ring->tdh);
-       writel(0, hw->hw_addr + tx_ring->tdt); */
 }
 
 /**
@@ -657,13 +742,9 @@ static void m1000_reset_rx_ring(struct m1000_adapter *adapter)
 
     adapter->csb[RX1SNTR] = 0;
     adapter->csb[RX1SNTP] = 0;
-
-    /*
-       writel(0, hw->hw_addr + rx_ring->rdh);
-       writel(0, hw->hw_addr + rx_ring->rdt); */
 }
 
-#define M1000_MAX_DATA_PER_TXD	4096
+#define M1000_MAX_DATA_PER_TXD	1522
 
 /* number of free tx descriptors (the very last is excluded) */
 static inline int m1000_tx_free_desc(struct m1000_adapter * adapter)
@@ -719,14 +800,6 @@ static netdev_tx_t m1000_start_xmit(struct sk_buff *skb,
 	    DD("tx - Checksum is partial\n");
 	    break;
     }
-    /*
-       if (skb->ip_summed == CHECKSUM_PARTIAL)
-       tx_flags |= M1000_TX_FLAGS_CSUM;
-
-       if (unlikely(skb->no_fcs))
-       tx_flags |= M1000_TX_FLAGS_NO_FCS;
-       */
-
     DTXS();
 
     i = adapter->csb[TXSNTS];
@@ -819,11 +892,11 @@ static irqreturn_t m1000_intr(int irq, void *data)
     //mmio_write32(adapter, IE, 0);
 
     adapter->mit_delay = mit_delay;  // coherent snapshot
-    if (adapter->mit_delay >= MIT_DELAY_THRESHOLD) {
-	/* If interrupt mitigation is on, we start a timer */
-	adapter->tasvar = 0;
+    if (adapter->mit_delay >= MIT_DELAY_MIN) {
+	/* If interrupt mitigation is on, we start the mit_timer */
+	adapter->mit_tasvar = 0;
 	delay = ktime_set(0, adapter->mit_delay);
-	hrtimer_start(&adapter->timer, delay, HRTIMER_MODE_REL);
+	hrtimer_start(&adapter->mit_timer, delay, HRTIMER_MODE_REL);
     }
 
     if (likely(napi_schedule_prep(&adapter->napi))) {
@@ -841,6 +914,9 @@ static irqreturn_t m1000_intr(int irq, void *data)
 
     return IRQ_HANDLED;
 }
+
+static int nf = 0;
+static int tf = 0;
 
 /**
  * m1000_clean - NAPI Rx polling callback
@@ -860,22 +936,28 @@ static int m1000_clean(struct napi_struct *napi, int budget)
 
     if (!tx_clean_complete)
 	work_done = budget;
+
     /* If budget not fully consumed, exit the polling mode */
     if (work_done < budget) {
 	napi_complete(napi);
 
-	if (adapter->mit_delay < MIT_DELAY_THRESHOLD) {
+	if (adapter->mit_delay < MIT_DELAY_MIN) {
 	    /* Interrupt mitigation is off, so we just have to
 	       enable interrupts. */
 	    m1000_irq_enable(adapter);
 	}
 	else {
 	    /* Interrupt mitigation is on.
-	       If the timer is already expired we have to enable 
+	       If the mit_timer is already expired we have to enable 
 	       the interrupts,
-	       because the timer callback didn't enable them. */
-	    if (test_and_set_bit(1, &adapter->tasvar)) {
+	       because the mit_timer callback didn't enable them. */
+	    if (test_and_set_bit(1, &adapter->mit_tasvar)) {
+		tf++;
 		m1000_irq_enable(adapter);
+	    } else nf++;
+	    if (tf+nf==10000) {
+		D("tf=%d nf=%d\n", tf, nf);
+		tf = nf = 0;
 	    }
 	}
     }

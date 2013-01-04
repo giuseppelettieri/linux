@@ -40,6 +40,10 @@
 #include <linux/if_vlan.h>
 #include <linux/hrtimer.h>
 
+
+#include <net/net_namespace.h>
+#include <net/snmp.h>
+
 #include "m1000_emu.h"
 
 
@@ -121,9 +125,20 @@ struct m1000_adapter {
     int bars;
 
     struct mutex mutex;
-    struct hrtimer timer;
+
+    /* interrupt mitigation */
+    struct hrtimer mit_timer;
     unsigned int mit_delay;
-    volatile unsigned long tasvar;
+    volatile unsigned long mit_tasvar;
+
+    /* UDP anti-livelock */
+    struct netns_mib * snmp_mib;
+    struct hrtimer ual_timer;
+    unsigned int ual_delay;
+    unsigned int ual_threshold;
+    unsigned long ual_indatagrams;
+    unsigned long ual_inerrors;
+    unsigned long ual_rcvbuferrors;
 };
 
 //extern void m1000_check_options(struct m1000_adapter *adapter);

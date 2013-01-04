@@ -23,6 +23,9 @@ enum {
 
     HWADDRL,
     HWADDRH,
+
+    UALTMR,	// hardware UAL timer interval (in ms)
+    UALDTH,	// UAL drop threshold (in %)
 };
 
 /* communication status block index */
@@ -37,6 +40,8 @@ enum {
     TXHNTS,	// TX hardware next to send
     TXSNTS,	// TX software next to send
     TXSNTC,	// TX software netx to clean
+
+    UALDRP,	// percentage of UDPv4 dropped packets (guest feedback)
 
     NTFYMASK,	// the guest specifies if it wants to be notified by the HV
 };
