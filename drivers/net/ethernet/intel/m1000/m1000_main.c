@@ -224,17 +224,58 @@ static void m1000_irq_enable(struct m1000_adapter *adapter)
     mmio_write32(adapter, IE, 1);
 }
 
+static enum hrtimer_restart 
+m1000_schedule_napi(struct m1000_adapter * adapter, int restart)
+{
+    enum hrtimer_restart ret = HRTIMER_NORESTART;    
+    ktime_t delay;
+
+    adapter->mit_delay = mit_delay;  // coherent snapshot
+    if (adapter->mit_delay >= MIT_DELAY_MIN) {
+	/* If interrupt mitigation is on, we (re) start the mit_timer */
+	adapter->mit_tasvar = 0;
+	delay = ktime_set(0, adapter->mit_delay);
+	if (restart) {
+	    hrtimer_forward_now(&adapter->mit_timer, delay);
+	    ret = HRTIMER_RESTART;
+	} else
+	    hrtimer_start(&adapter->mit_timer, delay, HRTIMER_MODE_REL);
+    }
+
+    if (likely(napi_schedule_prep(&adapter->napi))) {
+	adapter->total_tx_bytes = 0;
+	adapter->total_tx_packets = 0;
+	adapter->total_rx_bytes = 0;
+	adapter->total_rx_packets = 0;
+	__napi_schedule(&adapter->napi);
+    } else D("NAPI BUG! (mtc)\n");
+
+    return ret;
+}
+
 static struct m1000_adapter * gap;  // ugly, but the mit_timer callback needs it
 
 static enum hrtimer_restart mit_timer_callback(struct hrtimer * timer)
 {
     struct m1000_adapter * adapter = gap;
+    enum hrtimer_restart ret = HRTIMER_NORESTART;
 
-    /* if napi work is done, reenable interrupts */
     if (test_and_set_bit(1, &adapter->mit_tasvar)) {
-	m1000_irq_enable(adapter);
+	/* If we enter here, we are sure that the last napi work is done */
+	if (adapter->csb[RX0HNTR] != adapter->csb[RX0SNTR] ||
+		adapter->csb[RX1HNTR] != adapter->csb[RX1SNTR] ||
+		    adapter->csb[TXSNTC] != adapter->csb[TXHNTS]) {
+	    /* If there is more work to do schedule again a napi context,
+	       and restart the timer (if the interrupt mitigation is 
+	       still on) */
+	    ret = m1000_schedule_napi(adapter, 1);
+	} 
+	else  /* if there is no more work reenable the interrupts, we
+		 will wait for further notifications */
+	    m1000_irq_enable(adapter);
     }
-    return HRTIMER_NORESTART;
+
+    return ret;
 }
 
 static enum hrtimer_restart ual_timer_callback(struct hrtimer * timer)
@@ -883,34 +924,12 @@ static irqreturn_t m1000_intr(int irq, void *data)
 {
     struct net_device *netdev = data;
     struct m1000_adapter *adapter = netdev_priv(netdev);
-    ktime_t delay;
 
-    DD("interrupt received\n");
+    /* Acknowledge the interrupt */
     mmio_write32(adapter, NTFY, M1000_NTFY_IC);
 
-    /* disable interrupts, without the synchronize_irq bit */ 
-    //mmio_write32(adapter, IE, 0);
-
-    adapter->mit_delay = mit_delay;  // coherent snapshot
-    if (adapter->mit_delay >= MIT_DELAY_MIN) {
-	/* If interrupt mitigation is on, we start the mit_timer */
-	adapter->mit_tasvar = 0;
-	delay = ktime_set(0, adapter->mit_delay);
-	hrtimer_start(&adapter->mit_timer, delay, HRTIMER_MODE_REL);
-    }
-
-    if (likely(napi_schedule_prep(&adapter->napi))) {
-	adapter->total_tx_bytes = 0;
-	adapter->total_tx_packets = 0;
-	adapter->total_rx_bytes = 0;
-	adapter->total_rx_packets = 0;
-	__napi_schedule(&adapter->napi);
-    } else {
-	/* this really should not happen! if it does it is basically a
-	 * bug, but not a hard error, so enable ints and continue */
-	m1000_irq_enable(adapter);
-	D("NAPI BUG!\n");
-    }
+    /* Start the napi worker (and the mitigation timer) */
+    m1000_schedule_napi(adapter, 0);
 
     return IRQ_HANDLED;
 }
@@ -928,6 +947,7 @@ static int m1000_clean(struct napi_struct *napi, int budget)
 					struct m1000_adapter, napi);
     int tx_clean_complete = 0, work_done = 0;
     
+work:
     DTXS(); DRXS();
     tx_clean_complete = m1000_clean_tx_ring(adapter);
     m1000_receive_from_rx0_ring(adapter, &work_done, budget);
@@ -947,13 +967,23 @@ static int m1000_clean(struct napi_struct *napi, int budget)
 	    m1000_irq_enable(adapter);
 	}
 	else {
-	    /* Interrupt mitigation is on.
-	       If the mit_timer is already expired we have to enable 
-	       the interrupts,
-	       because the mit_timer callback didn't enable them. */
+	    /* Interrupt mitigation is on. */
 	    if (test_and_set_bit(1, &adapter->mit_tasvar)) {
+	    /* The mit_timer expired before we could finish our napi work.
+	       If there is some new work we reschedule ourselves, otherwise
+	       we enable the interrupts (we will be notified later) */
+		if (adapter->csb[RX0HNTR] != adapter->csb[RX0SNTR] ||
+			adapter->csb[RX1HNTR] != adapter->csb[RX1SNTR] ||
+			    adapter->csb[TXSNTC] != adapter->csb[TXHNTS]) {
+		    /* If there is more work to do schedule again a napi 
+		       context, and restart the timer (if the interrupt 
+		       mitigation is still on) */
+		    m1000_schedule_napi(adapter, 0);
+		    goto work;
+		}
+		else
+		    m1000_irq_enable(adapter);
 		tf++;
-		m1000_irq_enable(adapter);
 	    } else nf++;
 	    if (tf+nf==10000) {
 		D("tf=%d nf=%d\n", tf, nf);
@@ -1151,17 +1181,10 @@ static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
 		mskb->length, DMA_FROM_DEVICE);
 	mskb->dma = 0;
 
-
-	/* adjust length to remove Ethernet CRC 
-	if (likely(!(netdev->features & NETIF_F_RXFCS)))
-	    length -= 4; */
 	total_rx_bytes += length;
 	total_rx_packets++;
 
 	skb_put(skb, length);
-
-	//skb_checksum_none_assert(skb);
-	/* TCP/UDP Checksum has not been calculated */
 
 	/* It must be a TCP or UDP packet with a valid checksum */
 	skb->ip_summed = CHECKSUM_UNNECESSARY;  // don't check
@@ -1176,7 +1199,6 @@ static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
 	rx_desc = next_rx_desc;
 	mskb = next_mskb;
     }
-    //rx_ring->next_to_clean = i;
     adapter->csb[RX1SNTR] = i;
 
     if (count)
