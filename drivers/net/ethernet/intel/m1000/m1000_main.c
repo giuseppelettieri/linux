@@ -516,6 +516,8 @@ static int m1000_open(struct net_device *netdev)
     adapter->csb[RX1SNTR] = adapter->csb[RX1HNTR] = adapter->csb[RX1SNTP] = 0;
     adapter->csb[TXSNTC] = adapter->csb[TXHNTS] = adapter->csb[TXSNTS] = 0;
 
+    adapter->csb[TXNTFY] = 1;
+
     mmio_write32(adapter, RXRTH, 128);
 
     /* initialize all the registers containing addresses and lengths */
@@ -866,11 +868,16 @@ static netdev_tx_t m1000_start_xmit(struct sk_buff *skb,
     tx_desc->buffer_length = cpu_to_le32(mskb->length);
 
     if (unlikely(++i == tx_ring->length)) i = 0;
+    //skb_orphan(skb);
+    wmb();
+
     adapter->csb[TXSNTS] = i;
+    mb();
+    if (adapter->csb[TXNTFY])
+	mmio_write32(adapter, NTFY, M1000_NTFY_TXD);
 
     DD("tx-len = %d, buffer address = %p\n", skb->len, (void *)mskb->dma);
     DTXS();
-    mmio_write32(adapter, NTFY, M1000_NTFY_TXD);
 
     /* Make sure there is space in the ring for the next send. */
     if (unlikely(m1000_tx_free_desc(adapter) == 0)) {

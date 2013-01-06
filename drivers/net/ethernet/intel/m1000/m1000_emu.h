@@ -43,7 +43,7 @@ enum {
 
     UALDRP,	// percentage of UDPv4 dropped packets (guest feedback)
 
-    NTFYMASK,	// the guest specifies if it wants to be notified by the HV
+    TXNTFY,	// the guest specifies if it wants to be notified by the HW
 };
 
 #define M1000_NTFYMASK_RX   0x00000001  // there are new rx frames in the ring
