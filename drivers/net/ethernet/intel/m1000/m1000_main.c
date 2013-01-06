@@ -860,9 +860,6 @@ static netdev_tx_t m1000_start_xmit(struct sk_buff *skb,
 	goto drop;
     }
 
-    netdev_sent_queue(netdev, skb->len);
-    skb_tx_timestamp(skb);
-
     tx_desc = &tx_ring->descriptor_array[i];
     tx_desc->buffer_address = cpu_to_le64(mskb->dma);
     tx_desc->buffer_length = cpu_to_le32(mskb->length);
@@ -1037,8 +1034,6 @@ static bool m1000_clean_tx_ring(struct m1000_adapter *adapter)
     }
 
     adapter->csb[TXSNTC] = i;
-
-    netdev_completed_queue(netdev, pkts_compl, bytes_compl);
 
 #define TX_WAKE_THRESHOLD 32
     if (unlikely(count && netif_carrier_ok(netdev) &&
