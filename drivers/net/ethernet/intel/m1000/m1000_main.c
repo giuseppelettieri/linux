@@ -705,16 +705,11 @@ static void m1000_free_ring(struct m1000_adapter *adapter, struct m1000_ring * r
 static void m1000_unmap_and_free_tx_buffer(struct m1000_adapter *adapter,
 	struct m1000_sk_buff *mskb)
 {
-    if (mskb->dma) {
-	dma_unmap_single(&adapter->pdev->dev, mskb->dma,
-		    mskb->length,
-		    DMA_TO_DEVICE);
-	mskb->dma = 0;
-    }
-    if (mskb->skb) {
-	dev_kfree_skb_any(mskb->skb);
-	mskb->skb = NULL;
-    }
+    dma_unmap_single(&adapter->pdev->dev, mskb->dma, mskb->length, 
+			    DMA_TO_DEVICE);
+    mskb->dma = 0;
+    dev_kfree_skb_any(mskb->skb);
+    mskb->skb = NULL;
 }
 
 /**
@@ -1012,7 +1007,6 @@ static bool m1000_clean_tx_ring(struct m1000_adapter *adapter)
     unsigned int i;
     unsigned int count = 0;
     unsigned int total_tx_bytes = 0, total_tx_packets = 0;
-    unsigned int bytes_compl = 0, pkts_compl = 0;
 
     i = adapter->csb[TXSNTC];
 
@@ -1023,10 +1017,6 @@ static bool m1000_clean_tx_ring(struct m1000_adapter *adapter)
 
 	total_tx_packets++;
 	total_tx_bytes += mskb->length;
-	if (mskb->skb) {
-	    bytes_compl += mskb->skb->len;
-	    pkts_compl++;
-	}
 
 	m1000_unmap_and_free_tx_buffer(adapter, mskb);
 	if (unlikely(++i == tx_ring->length)) i = 0;
