@@ -860,7 +860,8 @@ static netdev_tx_t m1000_start_xmit(struct sk_buff *skb,
     tx_desc->buffer_length = cpu_to_le32(mskb->length);
 
     if (unlikely(++i == tx_ring->length)) i = 0;
-    //skb_orphan(skb);
+    skb_orphan(skb);
+    nf_reset(skb);
     wmb();
 
     adapter->csb[TXSNTS] = i;
@@ -874,6 +875,9 @@ static netdev_tx_t m1000_start_xmit(struct sk_buff *skb,
     /* Make sure there is space in the ring for the next send. */
     if (unlikely(m1000_tx_free_desc(adapter) == 0)) {
 	netif_stop_queue(netdev);
+	smp_mb();
+	if (m1000_tx_free_desc(adapter))
+	    netif_start_queue(netdev);
     }
 
     return NETDEV_TX_OK;
