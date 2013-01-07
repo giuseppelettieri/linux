@@ -103,7 +103,7 @@ struct m1000_adapter {
     u32 tx_timeout_count;
 
     /* RX */
-    struct m1000_ring rx_ring;
+    struct m1000_ring rx1_ring;
     struct napi_struct napi;
 
     /* RX ringbuffer */

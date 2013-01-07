@@ -112,10 +112,10 @@ static netdev_tx_t m1000_start_xmit(struct sk_buff *skb,
 static struct net_device_stats * m1000_get_stats(struct net_device *netdev);
 static irqreturn_t m1000_intr(int irq, void *data);
 static bool m1000_clean_tx_ring(struct m1000_adapter *adapter);
-static int m1000_clean(struct napi_struct *napi, int budget);
+static int m1000_poll(struct napi_struct *napi, int budget);
 static bool m1000_receive_from_rx0_ring(struct m1000_adapter *adapter,
 	int *work_done, int work_to_do);
-static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
+static bool m1000_receive_from_rx1_ring(struct m1000_adapter *adapter,
 	int *work_done, int work_to_do);
 static void m1000_tx_timeout(struct net_device *dev);
 static void m1000_prepare_rx_buffers(struct m1000_adapter *adapter);
@@ -253,6 +253,8 @@ m1000_schedule_napi(struct m1000_adapter * adapter, int restart)
     return ret;
 }
 
+#define MORE_NAPI_WORK(a) ((a)->csb[RX0HNTR] != (a)->csb[RX0SNTR] || (a)->csb[RX1HNTR] != (a)->csb[RX1SNTR] || (a)->csb[TXSNTC] != (a)->csb[TXHNTS])
+
 static struct m1000_adapter * gap;  // ugly, but the mit_timer callback needs it
 
 static enum hrtimer_restart mit_timer_callback(struct hrtimer * timer)
@@ -262,9 +264,7 @@ static enum hrtimer_restart mit_timer_callback(struct hrtimer * timer)
 
     if (test_and_set_bit(1, &adapter->mit_tasvar)) {
 	/* If we enter here, we are sure that the last napi work is done */
-	if (adapter->csb[RX0HNTR] != adapter->csb[RX0SNTR] ||
-		adapter->csb[RX1HNTR] != adapter->csb[RX1SNTR] ||
-		    adapter->csb[TXSNTC] != adapter->csb[TXHNTS]) {
+	if (MORE_NAPI_WORK(adapter)) {
 	    /* If there is more work to do schedule again a napi context,
 	       and restart the timer (if the interrupt mitigation is 
 	       still on) */
@@ -381,7 +381,7 @@ static int __devinit m1000_probe(struct pci_dev *pdev,
     netdev->netdev_ops = &m1000_netdev_ops;
     //m1000_set_ethtool_ops(netdev);
     netdev->watchdog_timeo = 10 * HZ;
-    netif_napi_add(netdev, &adapter->napi, m1000_clean, 128);
+    netif_napi_add(netdev, &adapter->napi, m1000_poll, 128);
 
     strncpy(netdev->name, pci_name(pdev), sizeof(netdev->name) - 1);
 
@@ -481,7 +481,7 @@ static int m1000_open(struct net_device *netdev)
 {
     struct m1000_adapter *adapter = netdev_priv(netdev);
     struct m1000_ring * tx_ring = &adapter->tx_ring;
-    struct m1000_ring * rx_ring = &adapter->rx_ring;
+    struct m1000_ring * rx_ring = &adapter->rx1_ring;
     struct m1000_ringbuffer * rx0_ring = &adapter->rx0_ring;
     int err;
     ktime_t ual_kdelay;
@@ -615,7 +615,7 @@ static int m1000_close(struct net_device *netdev)
     dma_free_coherent(&adapter->pdev->dev, M1000_CSB_SIZE, adapter->csb,
 			adapter->csb_dma);
     m1000_free_ringbuffer(adapter, &adapter->rx0_ring);
-    m1000_free_ring(adapter, &adapter->rx_ring);
+    m1000_free_ring(adapter, &adapter->rx1_ring);
     m1000_free_ring(adapter, &adapter->tx_ring);
     D("close finished\n");
 
@@ -691,7 +691,7 @@ static void m1000_free_ring(struct m1000_adapter *adapter, struct m1000_ring * r
 
     if (ring == &adapter->tx_ring)
 	m1000_reset_tx_ring(adapter);
-    else /* if (ring == &adapter->rx_ring) */
+    else /* if (ring == &adapter->rx1_ring) */
 	m1000_reset_rx_ring(adapter);
 
     vfree(ring->mskb_array);
@@ -752,7 +752,7 @@ static void m1000_reset_rx_ring(struct m1000_adapter *adapter)
 {
     struct m1000_sk_buff *mskb;
     struct pci_dev *pdev = adapter->pdev;
-    struct m1000_ring * rx_ring = &adapter->rx_ring;
+    struct m1000_ring * rx_ring = &adapter->rx1_ring;
     unsigned long size;
     unsigned int i;
 
@@ -941,10 +941,10 @@ static int nf = 0;
 static int tf = 0;
 
 /**
- * m1000_clean - NAPI Rx polling callback
+ * m1000_poll - NAPI polling callback
  * @adapter: board private structure
  **/
-static int m1000_clean(struct napi_struct *napi, int budget)
+static int m1000_poll(struct napi_struct *napi, int budget)
 {
     struct m1000_adapter *adapter = container_of(napi, 
 					struct m1000_adapter, napi);
@@ -954,7 +954,7 @@ work:
     DTXS(); DRXS();
     tx_clean_complete = m1000_clean_tx_ring(adapter);
     m1000_receive_from_rx0_ring(adapter, &work_done, budget);
-    m1000_receive_from_rx_ring(adapter, &work_done, budget);
+    m1000_receive_from_rx1_ring(adapter, &work_done, budget);
     DTXS(); DRXS();
 
     if (!tx_clean_complete)
@@ -966,8 +966,12 @@ work:
 
 	if (adapter->mit_delay < MIT_DELAY_MIN) {
 	    /* Interrupt mitigation is off, so we just have to
-	       enable interrupts. */
-	    m1000_irq_enable(adapter);
+	       enable interrupts or reschedule if more work has come */
+	    if (MORE_NAPI_WORK(adapter)) {
+		m1000_schedule_napi(adapter, 0);
+		goto work;
+	    } else
+		m1000_irq_enable(adapter);
 	}
 	else {
 	    /* Interrupt mitigation is on. */
@@ -975,9 +979,7 @@ work:
 	    /* The mit_timer expired before we could finish our napi work.
 	       If there is some new work we reschedule ourselves, otherwise
 	       we enable the interrupts (we will be notified later) */
-		if (adapter->csb[RX0HNTR] != adapter->csb[RX0SNTR] ||
-			adapter->csb[RX1HNTR] != adapter->csb[RX1SNTR] ||
-			    adapter->csb[TXSNTC] != adapter->csb[TXHNTS]) {
+		if (MORE_NAPI_WORK(adapter)) {
 		    /* If there is more work to do schedule again a napi 
 		       context, and restart the timer (if the interrupt 
 		       mitigation is still on) */
@@ -1125,18 +1127,18 @@ static bool m1000_receive_from_rx0_ring(struct m1000_adapter *adapter,
 }
 
 /**
- * m1000_receive_from_rx_ring - Send received data up the network stack; legacy
+ * m1000_receive_from_rx1_ring - Send received data up the network stack; legacy
  * @adapter: board private structure
  * @rx_ring: ring to clean
  * @work_done: amount of napi work completed this call
  * @work_to_do: max amount of work allowed for this call to do
  */
-static bool m1000_receive_from_rx_ring(struct m1000_adapter *adapter,
+static bool m1000_receive_from_rx1_ring(struct m1000_adapter *adapter,
 	int *work_done, int work_to_do)
 {
     struct net_device *netdev = adapter->netdev;
     struct pci_dev *pdev = adapter->pdev;
-    struct m1000_ring *rx_ring = &adapter->rx_ring;
+    struct m1000_ring *rx_ring = &adapter->rx1_ring;
     struct m1000_descriptor *rx_desc, *next_rx_desc;
     struct m1000_sk_buff *mskb, *next_mskb;
     uint32_t length;
@@ -1218,7 +1220,7 @@ static void m1000_prepare_rx_buffers(struct m1000_adapter *adapter)
 {
     struct net_device *netdev = adapter->netdev;
     struct pci_dev *pdev = adapter->pdev;
-    struct m1000_ring * rx_ring = &adapter->rx_ring;
+    struct m1000_ring * rx_ring = &adapter->rx1_ring;
     struct m1000_descriptor *rx_desc;
     struct m1000_sk_buff *mskb;
     struct sk_buff *skb;
