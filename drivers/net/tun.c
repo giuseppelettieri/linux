@@ -135,8 +135,16 @@ struct tun_struct {
 	struct socket_wq	wq;
 
 	int			vnet_hdr_sz;
-	int			receive_queue_len;
+
+/* Length of the read() queue exposed to the reader. Could be temporarily 
+less than the real queue length while a burst of packets is in progress. */
+ 	int			receive_queue_len;
+
+/* Current length of the burst of packets in progress. */
 	int			tx_burst_packets;
+
+/* MAC address of the last packet handed off to the kernel. */
+	uint8_t			last_destination[ETH_ALEN];
 
 #ifdef TUN_DEBUG
 	int debug;
@@ -425,11 +433,14 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto drop;
 	skb_orphan(skb);
 
-	/* Enqueue packet */
+	/* Enqueue packet and update tx_burst_packet and receive_queue_len
+	   atomically. */
 	spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock, flags);
 	__skb_queue_tail(&tun->socket.sk->sk_receive_queue, skb);
-	tun->tx_burst_packets++;
+	tun->tx_burst_packets++;  // another packet for the burst in progress
 	if (!(skb_shinfo(skb)->tx_flags & SKBTX_MULTIFRAME_MORE)) {
+		/* If the packet is the last one in a burst, we increment
+		   the exposed read() queue length. */
 		tun->receive_queue_len += tun->tx_burst_packets;
 		tun->tx_burst_packets = 0;
 	}
@@ -437,6 +448,8 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* Notify and wake up reader process */
 	if (!(skb_shinfo(skb)->tx_flags & SKBTX_MULTIFRAME_MORE)) {
+		/* Notify and wake up the reader processes only when the
+		   packet is the last in a burst */
 		if (tun->flags & TUN_FASYNC)
 			kill_fasync(&tun->fasync, SIGIO, POLL_IN);
 		wake_up_interruptible_poll(&tun->wq.wait, POLLIN |
@@ -573,6 +586,7 @@ static unsigned int tun_chr_poll(struct file *file, poll_table * wait)
 
 	tun_debug(KERN_INFO, tun, "tun_chr_poll\n");
 
+	/* We use the exposed read() queue length instead of the real one */
 	poll_wait(file, &tun->wq.wait, wait);
 
 	if (tun->receive_queue_len > 0)
@@ -871,34 +885,30 @@ static ssize_t tun_get_user(struct tun_struct *tun, void *msg_control,
 }
 
 /* Get many packets from user space buffer */
-static ssize_t tun_get_user_multiframe(struct tun_struct *tun, void *msg_control,
-			    const struct iovec *iv, ssize_t total_len,
-			    size_t count, int noblock)
+static ssize_t tun_get_user_multiframe(struct tun_struct *tun, 
+			    const struct iovec *iv,
+			    ssize_t total_len, size_t count, int noblock)
 {
 	struct tun_pi pi = { 0, cpu_to_be16(ETH_P_IP) };
 	struct sk_buff *skb;
-	size_t len, align = NET_SKB_PAD;
-	const struct iovec * civ;
+	size_t len, align = NET_SKB_PAD + NET_IP_ALIGN;
 	int offset = 0;
-	int copylen;
-	bool zerocopy = false;
 	int err;
 	int i;
-
-	align += NET_IP_ALIGN;
-
-	if (msg_control)
-		zerocopy = true;
+	int j;
+	__u8 last_tx_flags;
+	struct sk_buff * last_skb = NULL;
+	int last_len = 0;
 
 	for (i=0; i<count; i++) {
-		len = iv[i].iov_len;
-		civ = &iv[i];
+		len = iv->iov_len;
 		offset = 0;
 
 		if (!(tun->flags & TUN_NO_PI)) {
 			if ((len -= sizeof(pi)) > total_len)
 				return -EINVAL;
-			if (copy_from_user((void *)&pi, civ->iov_base, sizeof(pi)))
+			if (copy_from_user((void *)&pi, iv->iov_base,
+							    sizeof(pi)))
 				return -EFAULT;
 			offset += sizeof(pi);
 		}
@@ -906,27 +916,33 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun, void *msg_control
 		if (unlikely(len < ETH_HLEN ))
 			return -EINVAL;
 
-		if (zerocopy) {
-			copylen = GOODCOPY_LEN;
-		} else
-			copylen = len;
-
 		/* since the fourth parameter is 0 we are sure the skb 
 		   is going to be linear */
-		skb = tun_alloc_skb(tun, align, copylen, 0, noblock);
+		skb = tun_alloc_skb(tun, align, len, 0, noblock);
 		if (IS_ERR(skb)) {
 			if (PTR_ERR(skb) != -EAGAIN)
 				tun->dev->stats.rx_dropped++;
 			return PTR_ERR(skb);
 		}
 
-		if (zerocopy)
-			err = zerocopy_sg_from_iovec(skb, civ, offset, 1);
+		/* Since we know the skb is linear, we can use 
+		   copy_from_user into skb->data, instead of the 
+		   general skb_copy_datagram_from_iovec */	
+		err = copy_from_user(skb->data, iv->iov_base, len);
+
+		/* We compare the destination of the current packet with the
+		   destination of the last packet. If different, we don't
+		   set the SKBTX_MULTIFRAME_MORE bit. */
+		last_tx_flags = 0;
+		for (j=0; j<ETH_ALEN; j++) {
+		    last_tx_flags |= (skb->data[j] ^
+					    tun->last_destination[j]);
+		    tun->last_destination[j] = skb->data[j];
+		}
+		if (!last_tx_flags)
+		    last_tx_flags = SKBTX_MULTIFRAME_MORE;
 		else
-			/* Since we know the skb is linear, we can use 
-			   copy_from_user into skb->data, instead of the 
-			   general skb_copy_datagram_from_iovec */	
-			err = copy_from_user(skb->data, civ->iov_base, len);
+		    last_tx_flags = 0;
 
 		if (err) {
 			tun->dev->stats.rx_dropped++;
@@ -936,21 +952,22 @@ static ssize_t tun_get_user_multiframe(struct tun_struct *tun, void *msg_control
 
 		skb->protocol = eth_type_trans(skb, tun->dev);
 
-		/* copy skb_ubuf_info for callback when skb has no error */
-		if (zerocopy) {
-			skb_shinfo(skb)->destructor_arg = msg_control;
-			skb_shinfo(skb)->tx_flags |= SKBTX_DEV_ZEROCOPY;
-		}
+		if (likely(last_skb)) {
+		    /* Send the last skb */
+		    skb_shinfo(last_skb)->tx_flags |= last_tx_flags;
+		    netif_rx_ni(last_skb);
+		    tun->dev->stats.rx_packets++;
+		    tun->dev->stats.rx_bytes += last_len;
+ 		}
+		last_skb = skb;
+		last_len = len;
 
-		if (i != count-1)
-			skb_shinfo(skb)->tx_flags |= SKBTX_MULTIFRAME_MORE;
-
-		netif_rx_ni(skb);
-
-		tun->dev->stats.rx_packets++;
-		tun->dev->stats.rx_bytes += len;
-
+		iv++;
 	}
+
+	netif_rx_ni(last_skb);
+	tun->dev->stats.rx_packets++;
+	tun->dev->stats.rx_bytes += last_len;
 
 	return total_len;
 }
@@ -968,9 +985,12 @@ static ssize_t tun_chr_aio_write(struct kiocb *iocb, const struct iovec *iv,
 	tun_debug(KERN_INFO, tun, "tun_chr_write %ld\n", count);
 
 	if (tun->flags & TUN_MULTI_FRAME)
-		result = tun_get_user_multiframe(tun, NULL, iv, iov_length(iv, count), count, file->f_flags & O_NONBLOCK);
+		result = tun_get_user_multiframe(tun, iv,
+					    iov_length(iv, count), count,
+					    file->f_flags & O_NONBLOCK);
 	else
-		result = tun_get_user(tun, NULL, iv, iov_length(iv, count), count, file->f_flags & O_NONBLOCK);
+		result = tun_get_user(tun, NULL, iv, iov_length(iv, count),
+					count, file->f_flags & O_NONBLOCK);
 
 	tun_put(tun);
 	return result;
@@ -1046,18 +1066,18 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 		total += tun->vnet_hdr_sz;
 	}
 
-	if (tun->flags & TUN_MULTI_FRAME)
-	{	
+	if (tun->flags & TUN_MULTI_FRAME) {	
 		uint16_t frame_size = skb->len;
+
+		/* Before we copy the frame, we prepend a two bytes header 
+		   that specifies the length of the frame contained in the
+		   skb. This is necessary because otherwise the reader
+		   could not know the length of the frame contained in
+		   each iovec element. */
 		if((len -= sizeof(frame_size)) < 0)
 			return -EINVAL;
-		/*if(unlikely(copy_to_user(iv->iov_base + total, (void*)&frame_size, sizeof(frame_size))))
-		{
-			printk("ERRORE!!\n");
-			return -EFAULT;
-		}*/
-		if (unlikely(memcpy_toiovecend(iv, (void *)&frame_size, total,
-					       sizeof(frame_size)))) {
+		if (unlikely(memcpy_toiovecend(iv, (void *)&frame_size,
+					    total, sizeof(frame_size)))) {
 			return -EFAULT;
 		}
 		total += sizeof(frame_size);
@@ -1090,10 +1110,13 @@ static ssize_t tun_do_read(struct tun_struct *tun,
 	while (len) {
 		current->state = TASK_INTERRUPTIBLE;
 
-		/* Read frames from the queue */
-		spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock, flags);
+		/* Read a frame from the queue and update 
+		   receive_queue_len, atomically. */
+		spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock,
+				    flags);
 		if (!(skb=__skb_dequeue(&tun->socket.sk->sk_receive_queue))) {
-			spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
+			spin_unlock_irqrestore(
+			    &tun->socket.sk->sk_receive_queue.lock, flags);
 			if (noblock) {
 				ret = -EAGAIN;
 				break;
@@ -1128,8 +1151,8 @@ static ssize_t tun_do_read(struct tun_struct *tun,
 }
 
 static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
-			   struct kiocb *iocb, const struct iovec *iv,
-			   unsigned long count, int noblock)
+					const struct iovec *iv,
+					unsigned long count, int noblock)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct sk_buff *skb = NULL;
@@ -1141,17 +1164,20 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 
 	tun_debug(KERN_INFO, tun, "tun_chr_read\n");
 
-	len = iv[0].iov_len;
+	len = iv->iov_len;
 
 	if (unlikely(!noblock))
 		add_wait_queue(&tun->wq.wait, &wait);
 	while (len) {
 		current->state = TASK_INTERRUPTIBLE;
 
-		/* Read frames from the queue */
-		spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock, flags);
+		/* Read some frames from the queue and update 
+		   receive_queue_len, atomically. */
+		spin_lock_irqsave(&tun->socket.sk->sk_receive_queue.lock,
+				    flags);
 		if (!(skb=__skb_dequeue(&tun->socket.sk->sk_receive_queue))) {
-			spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
+			spin_unlock_irqrestore(
+			    &tun->socket.sk->sk_receive_queue.lock, flags);
 			if (noblock) {
 				total = -EAGAIN;
 				goto out;
@@ -1170,20 +1196,22 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 			continue;
 		}
 		tun->receive_queue_len--;
-		spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
+		spin_unlock_irqrestore(
+			    &tun->socket.sk->sk_receive_queue.lock, flags);
 		break;
 	}
 
 	for (;;) 
 	{
 		/* copy the skb content to userspace */
-		ret = tun_put_user(tun, skb, iv+i, len);
+		ret = tun_put_user(tun, skb, iv, len);
 		kfree_skb(skb);
 		if (ret < 0) {
 			total = ret;
 			break;
 		}
 		total += ret;
+		iv++;
 		i++;
 		if (i == count)
 			break;
@@ -1195,12 +1223,11 @@ static ssize_t tun_do_read_multiframe(struct tun_struct *tun,
 		spin_unlock_irqrestore(&tun->socket.sk->sk_receive_queue.lock, flags);
 		if (!skb)
 			break;
-		len = iv[i].iov_len;
+		len = iv->iov_len;
 	}
 
-out:
 	netif_wake_queue(tun->dev);
-
+out:
 	current->state = TASK_RUNNING;
 	if (unlikely(!noblock))
 		remove_wait_queue(&tun->wq.wait, &wait);
@@ -1226,9 +1253,11 @@ static ssize_t tun_chr_aio_read(struct kiocb *iocb, const struct iovec *iv,
 	}
 
 	if (tun->flags & TUN_MULTI_FRAME)
-		ret = tun_do_read_multiframe(tun, iocb, iv, count, file->f_flags & O_NONBLOCK);
+		ret = tun_do_read_multiframe(tun, iv, count,
+						file->f_flags & O_NONBLOCK);
 	else
-		ret = tun_do_read(tun, iocb, iv, len, file->f_flags & O_NONBLOCK);
+		ret = tun_do_read(tun, iocb, iv, len,
+					file->f_flags & O_NONBLOCK);
 	ret = min_t(ssize_t, ret, len);
 out:
 	tun_put(tun);
@@ -1789,9 +1818,10 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case TUNSETMULTIFRAMEMODE:
-		/* Can be set only for TAPs, and only if TUN_VNET_HDR is not set */
-		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV || (tun->flags & TUN_VNET_HDR))
-		{
+		/* Can be set only for TAPs, and only if TUN_VNET_HDR is
+		   not set */
+		if ((tun->flags & TUN_TYPE_MASK) != TUN_TAP_DEV || 
+			(tun->flags & TUN_VNET_HDR)) {
 			ret = -EINVAL;
 			break;
 		}
