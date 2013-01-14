@@ -30,21 +30,25 @@ enum {
 
 /* communication status block index */
 enum {
-    RX0HNTR = 0,// RX0 hardware next to receive
-    RX0SNTR,	// RX0 software next to receive
 
+/* Hardware-driven words */
+    RX0HNTR = 0,// RX0 hardware next to receive
     RX1HNTR,	// RX1 hardware next to receive
+    TXHNTS,	// TX hardware next to send
+    TXNTFY,	// the HW specifies if it wants to be notified by the driver
+
+/* Software-driven words */
+    RX0SNTR,	// RX0 software next to receive
     RX1SNTR,	// RX1 software next to receive
     RX1SNTP,	// RX1 software next to prepare
-
-    TXHNTS,	// TX hardware next to send
     TXSNTS,	// TX software next to send
     TXSNTC,	// TX software netx to clean
-
     UALDRP,	// percentage of UDPv4 dropped packets (guest feedback)
-
-    TXNTFY,	// the guest specifies if it wants to be notified by the HW
 };
+
+/* This define MUST use the name of the very first element in the software
+   driven CSB. */
+#define CSB_READ_OFFSET  (sizeof(uint32_t) * RX0SNTR)
 
 #define M1000_NTFYMASK_RX   0x00000001  // there are new rx frames in the ring
 
