@@ -59,8 +59,13 @@ struct m1000_descriptor {
     uint32_t padding;
 };
 
+/* CTRL register bits */
 #define M1000_TX_ENABLED    0x00000001
 #define M1000_RX_ENABLED    0x00000002
+#define M1000_MSIX_ENABLED  0x00000004
+#define M1000_MSIX_CAPABLE  0x00040000	/* RO - is hardware MSIX-capable? */
+#define M1000_EN_MASK	    0x0000ffff
+#define M1000_CAP_MASK	    0xffff0000
 
 #define M1000_NTFY_TXD	    0x00000001  /* there are tx descriptors ready to be processed by the board */
 #define M1000_NTFY_RXD	    0x00000002  /* there are rx descriptors to be returned to the board */

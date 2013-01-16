@@ -124,6 +124,11 @@ struct m1000_adapter {
     /* for ioport free */
     int bars;
 
+    /* MSI-X support */
+    struct msix_entry *msix_entries;
+    cpumask_var_t *msix_affinity_masks;
+    int msix_enabled;
+
     struct mutex mutex;
 
     /* interrupt mitigation */

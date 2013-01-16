@@ -111,6 +111,7 @@ static netdev_tx_t m1000_start_xmit(struct sk_buff *skb,
 	struct net_device *netdev);
 static struct net_device_stats * m1000_get_stats(struct net_device *netdev);
 static irqreturn_t m1000_intr(int irq, void *data);
+static irqreturn_t m1000_msix_intr(int irq, void *data);
 static bool m1000_clean_tx_ring(struct m1000_adapter *adapter);
 static int m1000_poll(struct napi_struct *napi, int budget);
 static bool m1000_receive_from_rx0_ring(struct m1000_adapter *adapter,
@@ -181,18 +182,83 @@ static void __exit m1000_exit_module(void)
 
 module_exit(m1000_exit_module);
 
+static int m1000_request_msix_vectors(struct m1000_adapter *adapter)
+{
+    int num_vectors = 1;
+    int i;
+    int err = -ENOMEM;
+
+    adapter->msix_entries = kmalloc(num_vectors *
+				sizeof(struct msix_entry), GFP_KERNEL);
+    if (!adapter->msix_entries)
+	return -ENOMEM;
+
+    adapter->msix_affinity_masks = kzalloc(num_vectors *
+				    sizeof(cpumask_var_t), GFP_KERNEL);
+    if (!adapter->msix_affinity_masks)
+	goto alloc_affinity_masks;
+
+    for (i=0; i<num_vectors; i++)
+	if (!alloc_cpumask_var(&adapter->msix_affinity_masks[i],
+		GFP_KERNEL)) {
+	    i--;
+	    for (; i>=0; i--)
+		free_cpumask_var(adapter->msix_affinity_masks[i]);
+	    goto alloc_cpumasks;
+	}
+
+    for (i = 0; i<num_vectors; ++i)
+	adapter->msix_entries[i].entry = i;
+
+    /* pci_enable_msix returns positive if we can't get this many. */
+    err = pci_enable_msix(adapter->pdev, adapter->msix_entries, num_vectors);
+    if (err > 0)
+	err = -ENOSPC;
+    if (err)
+	goto enable_msix;
+
+    adapter->msix_enabled = M1000_MSIX_ENABLED;
+
+    err = request_irq(adapter->msix_entries[0].vector,
+	    m1000_msix_intr, 0, adapter->netdev->name, adapter);
+    if (!err)
+	return 0;
+
+    pci_disable_msix(adapter->pdev);
+enable_msix:
+    for (i=num_vectors-1; i>=0; i--)
+	free_cpumask_var(adapter->msix_affinity_masks[i]);
+alloc_cpumasks:
+    kfree(adapter->msix_affinity_masks);
+alloc_affinity_masks:
+    kfree(adapter->msix_entries);
+    return err;
+}
+
 static int m1000_request_irq(struct m1000_adapter *adapter)
 {
     struct net_device *netdev = adapter->netdev;
-    irq_handler_t handler = m1000_intr;
-    int irq_flags = IRQF_SHARED;
     int err;
+    int irq_flags = IRQF_SHARED;
 
-    err = request_irq(adapter->pdev->irq, handler, irq_flags, netdev->name,
-	    netdev);
-    if (err) {
-	D("Unable to allocate interrupt Error: %d\n", err);
+    /* Let's try with PCI MSI-X interrupts. */
+    if(mmio_read32(adapter, CTRL) & M1000_MSIX_CAPABLE) {
+	err = m1000_request_msix_vectors(adapter);
+	if (!err) {
+	    D("Interrupt mode: MSI-X\n");
+	    return 0;
+	}
+	D("Unable to allocate MSI-X vectors\n");
     }
+    adapter->msix_enabled = 0;
+
+    /* Fallback to regular interrupts. */
+    err = request_irq(adapter->pdev->irq, m1000_intr, irq_flags,
+			netdev->name, netdev);
+    if (err)
+	D("Unable to allocate interrupt, Error: %d\n", err);
+    else
+	D("Interrupt mode: regular irq\n");
 
     return err;
 }
@@ -200,26 +266,36 @@ static int m1000_request_irq(struct m1000_adapter *adapter)
 static void m1000_free_irq(struct m1000_adapter *adapter)
 {
     struct net_device *netdev = adapter->netdev;
+    int num_vectors = 1;
+    int i;
 
-    free_irq(adapter->pdev->irq, netdev);
+    if (adapter->msix_enabled) {
+	free_irq(adapter->msix_entries[0].vector, adapter);
+	pci_disable_msix(adapter->pdev);
+	for (i=num_vectors-1; i>=0; i--)
+	    free_cpumask_var(adapter->msix_affinity_masks[i]);
+	kfree(adapter->msix_affinity_masks);
+	kfree(adapter->msix_entries);
+    } else
+	free_irq(adapter->pdev->irq, netdev);
 }
 
 /**
- * m1000_irq_disable - Mask off interrupt generation on the NIC
+ * m1000_disable_interrupts - Mask off interrupt generation on the NIC
  * @adapter: board private structure
  **/
-static void m1000_irq_disable(struct m1000_adapter *adapter)
+static void m1000_disable_interrupts(struct m1000_adapter *adapter)
 {
     mmio_write32(adapter, IE, 0);
     synchronize_irq(adapter->pdev->irq);
 }
 
 /**
- * m1000_irq_enable - Enable default interrupt generation settings
+ * m1000_enable_interrupts - Enable default interrupt generation settings
  * @adapter: board private structure
  **/
 
-static void m1000_irq_enable(struct m1000_adapter *adapter)
+static void m1000_enable_interrupts(struct m1000_adapter *adapter)
 {
     mmio_write32(adapter, IE, 1);
 }
@@ -272,7 +348,7 @@ static enum hrtimer_restart mit_timer_callback(struct hrtimer * timer)
 	} 
 	else  /* if there is no more work reenable the interrupts, we
 		 will wait for further notifications */
-	    m1000_irq_enable(adapter);
+	    m1000_enable_interrupts(adapter);
     }
 
     return ret;
@@ -386,7 +462,7 @@ static int __devinit m1000_probe(struct pci_dev *pdev,
     strncpy(netdev->name, pci_name(pdev), sizeof(netdev->name) - 1);
 
     /* For the sake of safety, disable IRQ and tx/rx operation. */
-    m1000_irq_disable(adapter);
+    m1000_disable_interrupts(adapter);
     mmio_write32(adapter, CTRL, 0);
 
     mutex_init(&adapter->mutex);
@@ -483,7 +559,7 @@ static int m1000_open(struct net_device *netdev)
     struct m1000_ring * tx_ring = &adapter->tx_ring;
     struct m1000_ring * rx_ring = &adapter->rx1_ring;
     struct m1000_ringbuffer * rx0_ring = &adapter->rx0_ring;
-    int err;
+    int err = 0;
     ktime_t ual_kdelay;
 
     netif_carrier_off(netdev);
@@ -548,8 +624,11 @@ static int m1000_open(struct net_device *netdev)
     }
 
     napi_enable(&adapter->napi);
-    m1000_irq_enable(adapter);
-    mmio_write32(adapter, CTRL, M1000_TX_ENABLED | M1000_RX_ENABLED);
+    m1000_enable_interrupts(adapter);
+
+    /* enable the hardware operation */
+    mmio_write32(adapter, CTRL, M1000_TX_ENABLED | M1000_RX_ENABLED |
+				adapter->msix_enabled);
 
     netif_carrier_on(netdev);
     netif_start_queue(netdev);
@@ -600,7 +679,7 @@ static int m1000_close(struct net_device *netdev)
     netif_carrier_off(netdev);
 
     mmio_write32(adapter, CTRL, 0);
-    m1000_irq_disable(adapter);
+    m1000_disable_interrupts(adapter);
 
     napi_disable(&adapter->napi);
 
@@ -937,6 +1016,18 @@ static irqreturn_t m1000_intr(int irq, void *data)
     return IRQ_HANDLED;
 }
 
+static irqreturn_t m1000_msix_intr(int irq, void *data)
+{
+    struct m1000_adapter *adapter = data;
+
+    DD("MSIX interrupt\n");
+
+    /* Start the napi worker (and the mitigation timer) */
+    m1000_schedule_napi(adapter, 0);
+
+    return IRQ_HANDLED;
+}
+
 static int nf = 0;
 static int tf = 0;
 
@@ -971,7 +1062,7 @@ work:
 		m1000_schedule_napi(adapter, 0);
 		goto work;
 	    } else
-		m1000_irq_enable(adapter);
+		m1000_enable_interrupts(adapter);
 	}
 	else {
 	    /* Interrupt mitigation is on. */
@@ -987,7 +1078,7 @@ work:
 		    goto work;
 		}
 		else
-		    m1000_irq_enable(adapter);
+		    m1000_enable_interrupts(adapter);
 		tf++;
 	    } else nf++;
 	    if (tf+nf==10000) {
