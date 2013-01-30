@@ -319,7 +319,11 @@ struct e1000_adapter {
 	volatile int bat_software_tdt; /* coherent software copy of the TDT register: used to read the TDT value without accessing the real TDT */
 	spinlock_t bat_tdt_lock; /* lock used to atomically access the TDT register and its software copy */
 	volatile unsigned int bat_shadow_ntu; 
-	volatile int bat_pending; 
+	volatile int bat_pending;
+#define E1000_CSB_SIZE	    4096
+	int csb_on;
+	uint32_t * csb;			// communication status block
+	unsigned long csb_phyaddr;	// CSB physical address
 };
 
 enum e1000_state_t {

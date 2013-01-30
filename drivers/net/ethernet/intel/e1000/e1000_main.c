@@ -187,7 +187,7 @@ module_param(copybreak, uint, 0644);
 MODULE_PARM_DESC(copybreak,
 	"Maximum size of packet that is copied to a new buffer on receive");
 
-static unsigned int batching __read_mostly = 0;
+static unsigned int batching __read_mostly = 0U;
 module_param(batching, uint, 0644);
 
 static pci_ers_result_t e1000_io_error_detected(struct pci_dev *pdev,
@@ -1401,6 +1401,31 @@ static int e1000_open(struct net_device *netdev)
 	if (err)
 		goto err_setup_rx;
 
+	/* allocate the Communication Status Block */
+	adapter->csb = kmalloc(E1000_CSB_SIZE, GFP_KERNEL);
+	if (!adapter->csb) {
+	    printk("Commmunication Status Block allocation failed!");
+	    goto err_alloc_csb;
+	}
+	/* These value must match the register initial values set by
+	   e1000_configure_rx() and e1000_configure_tx(). */
+	adapter->csb[RXSNTR] = 0;
+	adapter->csb[RXSNTP] = 0;
+	adapter->csb[TXSNTS] = 0;
+	adapter->csb[TXSNTC] = 0;
+	adapter->csb[INTNTFY] = 1;
+	adapter->csb_phyaddr = virt_to_phys(adapter->csb);
+#if 1
+	ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
+	ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
+	adapter->csb_on = 1;
+#else
+	ew32(CSBBAH, 0);
+	ew32(CSBBAL, 0);
+	adapter->csb_on = 0;
+#endif
+	
+
 	e1000_power_up_phy(adapter);
 
 	adapter->mng_vlan_id = E1000_MNG_VLAN_NONE;
@@ -1435,6 +1460,8 @@ static int e1000_open(struct net_device *netdev)
 
 err_req_irq:
 	e1000_power_down_phy(adapter);
+	kfree(adapter->csb);
+err_alloc_csb:
 	e1000_free_all_rx_resources(adapter);
 err_setup_rx:
 	e1000_free_all_tx_resources(adapter);
@@ -1466,6 +1493,7 @@ static int e1000_close(struct net_device *netdev)
 	e1000_power_down_phy(adapter);
 	e1000_free_irq(adapter);
 
+	kfree(adapter->csb);
 	e1000_free_all_tx_resources(adapter);
 	e1000_free_all_rx_resources(adapter);
 
@@ -3051,7 +3079,8 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	if (unlikely(tx_flags & E1000_TX_FLAGS_NO_FCS))
 		tx_desc->lower.data &= ~(cpu_to_le32(E1000_TXD_CMD_IFCS));
 
-	adapter->batching = batching;
+	adapter->csb[TXSNTS] = i;
+	adapter->batching = 0;  //TODO batching
 	if (adapter->batching) {
 		tx_ring->next_to_use = i;
 		/* Ok, now we should write the NTU value to the TDT 
@@ -3083,10 +3112,12 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	    wmb();
 
 	    tx_ring->next_to_use = i;
-	    writel(i, hw->hw_addr + tx_ring->tdt);
-	    /* we need this if more than one processor can write to our tail
-	     * at a time, it syncronizes IO on IA64/Altix systems */
-	    mmiowb();
+	    if (!adapter->csb_on || adapter->csb[TXNTFY]) {
+		writel(i, hw->hw_addr + tx_ring->tdt);
+		/* we need this if more than one processor can write to our tail
+		 * at a time, it syncronizes IO on IA64/Altix systems */
+		mmiowb();
+	    }
 	}
 }
 
@@ -3320,6 +3351,7 @@ static netdev_tx_t e1000_xmit_frame(struct sk_buff *skb,
 		dev_kfree_skb_any(skb);
 		tx_ring->buffer_info[first].time_stamp = 0;
 		tx_ring->next_to_use = first;
+		adapter->csb[TXSNTS] = first;
 	}
 
 	return NETDEV_TX_OK;
@@ -3947,6 +3979,7 @@ static bool e1000_clean_tx_irq(struct e1000_adapter *adapter,
 	}
 
 	tx_ring->next_to_clean = i;
+	adapter->csb[TXSNTC] = i;
 
 	netdev_completed_queue(netdev, pkts_compl, bytes_compl);
 
@@ -4243,7 +4276,7 @@ next_desc:
 		rx_desc->status = 0;
 
 		/* return some buffers to hardware, one at a time is too slow */
-		if (unlikely(cleaned_count >= ((adapter->batching) ? E1000_RX_BUFFER_WRITE_BATCHING : E1000_RX_BUFFER_WRITE))) {
+		if (unlikely(cleaned_count >= ((adapter->batching || adapter->csb_on) ? E1000_RX_BUFFER_WRITE_BATCHING : E1000_RX_BUFFER_WRITE))) {
 			adapter->alloc_rx_buf(adapter, rx_ring, cleaned_count);
 			cleaned_count = 0;
 		}
@@ -4253,6 +4286,7 @@ next_desc:
 		buffer_info = next_buffer;
 	}
 	rx_ring->next_to_clean = i;
+	adapter->csb[RXSNTR] = i;
 
 	cleaned_count = E1000_DESC_UNUSED(rx_ring);
 	if (cleaned_count)
@@ -4409,7 +4443,7 @@ next_desc:
 		rx_desc->status = 0;
 
 		/* return some buffers to hardware, one at a time is too slow */
-		if (unlikely(cleaned_count >= ((adapter->batching) ? E1000_RX_BUFFER_WRITE_BATCHING : E1000_RX_BUFFER_WRITE))) {
+		if (unlikely(cleaned_count >= ((adapter->batching || adapter->csb_on) ? E1000_RX_BUFFER_WRITE_BATCHING : E1000_RX_BUFFER_WRITE))) {
 			adapter->alloc_rx_buf(adapter, rx_ring, cleaned_count);
 			cleaned_count = 0;
 		}
@@ -4419,6 +4453,7 @@ next_desc:
 		buffer_info = next_buffer;
 	}
 	rx_ring->next_to_clean = i;
+	adapter->csb[RXSNTR] = i;
 
 	cleaned_count = E1000_DESC_UNUSED(rx_ring);
 	if (cleaned_count)
@@ -4505,6 +4540,7 @@ check_page:
 
 	if (likely(rx_ring->next_to_use != i)) {
 		rx_ring->next_to_use = i;
+		adapter->csb[RXSNTP] = i;
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
 
@@ -4625,6 +4661,7 @@ map_skb:
 
 	if (likely(rx_ring->next_to_use != i)) {
 		rx_ring->next_to_use = i;
+		adapter->csb[RXSNTP] = i;
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
 
