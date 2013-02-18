@@ -315,10 +315,8 @@ struct e1000_adapter {
 
 	struct mutex mutex;
 
-#define E1000_PARAVIRTUAL_NONE	    0x00
-#define E1000_PARAVIRTUAL_BATCHING  0x01
-#define E1000_PARAVIRTUAL_CSB	    0x02
 	unsigned int paravirtual;	/* current paravirtual mode */
+	unsigned int batching;
 	volatile int bat_software_tdt; /* coherent software copy of the TDT register: used to read the TDT value without accessing the real TDT */
 	spinlock_t bat_tdt_lock; /* lock used to atomically access the TDT register and its software copy */
 	volatile unsigned int bat_shadow_ntu; 

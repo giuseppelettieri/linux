@@ -187,8 +187,11 @@ module_param(copybreak, uint, 0644);
 MODULE_PARM_DESC(copybreak,
 	"Maximum size of packet that is copied to a new buffer on receive");
 
-static unsigned int paravirtual __read_mostly = E1000_PARAVIRTUAL_CSB;
-module_param(paravirtual, uint, 0644);
+static unsigned int paravirtual __read_mostly = 0;
+module_param(paravirtual, uint, 0444);
+
+static unsigned int batching __read_mostly = 0;
+module_param(batching, uint, 0644);
 
 static pci_ers_result_t e1000_io_error_detected(struct pci_dev *pdev,
                      pci_channel_state_t state);
@@ -992,8 +995,8 @@ static int __devinit e1000_probe(struct pci_dev *pdev,
 	adapter->bars = bars;
 	adapter->need_ioport = need_ioport;
 
-	printk("paravirtual = %x\n", paravirtual);
 	adapter->paravirtual = paravirtual;
+	adapter->batching = batching;
 	spin_lock_init(&adapter->bat_tdt_lock);
 	adapter->bat_software_tdt = 0;
 	adapter->bat_shadow_ntu = 0;
@@ -1416,14 +1419,14 @@ static int e1000_open(struct net_device *netdev)
 	adapter->csb[TXSNTC] = 0;
 	adapter->csb[INTNTFY] = 1;
 	adapter->csb_phyaddr = virt_to_phys(adapter->csb);
-#if 1
-	ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
-	ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
-#else
-	ew32(CSBBAH, 0);
-	ew32(CSBBAL, 0);
-#endif
-	
+
+	if (adapter->paravirtual) {
+	    ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
+	    ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
+	} else {
+	    ew32(CSBBAH, 0);
+	    ew32(CSBBAL, 0);
+	}
 
 	e1000_power_up_phy(adapter);
 
@@ -3079,8 +3082,8 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 		tx_desc->lower.data &= ~(cpu_to_le32(E1000_TXD_CMD_IFCS));
 
 	adapter->csb[TXSNTS] = i;
-	adapter->paravirtual = paravirtual;
-	if (adapter->paravirtual == E1000_PARAVIRTUAL_BATCHING) {
+	adapter->batching = batching;
+	if (adapter->batching) {
 		tx_ring->next_to_use = i;
 		/* Ok, now we should write the NTU value to the TDT 
 		 * register. First of all we take a snapshot of the NTU 
@@ -3111,8 +3114,7 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	    wmb();
 
 	    tx_ring->next_to_use = i;
-	    if (adapter->paravirtual != E1000_PARAVIRTUAL_CSB ||
-		    adapter->csb[TXNTFY]) {
+	    if (!adapter->paravirtual || adapter->csb[TXNTFY]) {
 		writel(i, hw->hw_addr + tx_ring->tdt);
 		/* we need this if more than one processor can write to our tail
 		 * at a time, it syncronizes IO on IA64/Altix systems */
@@ -3897,6 +3899,21 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 	int tx_clean_complete = 0, work_done = 0;
 	struct e1000_hw *hw = &adapter->hw;
 
+	if (adapter->batching) {
+		spin_lock(&adapter->bat_tdt_lock);
+		if (adapter->bat_software_tdt != adapter->bat_shadow_ntu) {
+			/* If the TDT is not updated, due to a delayed 
+			 * write, we update it */
+			adapter->bat_software_tdt = adapter->bat_shadow_ntu;
+			writel(adapter->bat_shadow_ntu, hw->hw_addr + 
+				    adapter->tx_ring[0].tdt);
+			mmiowb();
+		} else {
+			adapter->bat_pending = 0;
+		}
+		spin_unlock(&adapter->bat_tdt_lock);
+	}
+
 	tx_clean_complete = e1000_clean_tx_irq(adapter, &adapter->tx_ring[0]);
 
 	adapter->clean_rx(adapter, &adapter->rx_ring[0], &work_done, budget);
@@ -3911,21 +3928,6 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 		napi_complete(napi);
 		if (!test_bit(__E1000_DOWN, &adapter->flags))
 			e1000_irq_enable(adapter);
-	}
-
-	if (adapter->paravirtual == E1000_PARAVIRTUAL_BATCHING) {
-		spin_lock(&adapter->bat_tdt_lock);
-		if (adapter->bat_software_tdt != adapter->bat_shadow_ntu) {
-			/* If the TDT is not updated, due to a delayed 
-			 * write, we update it */
-			adapter->bat_software_tdt = adapter->bat_shadow_ntu;
-			writel(adapter->bat_shadow_ntu, hw->hw_addr + 
-				    adapter->tx_ring[0].tdt);
-			mmiowb();
-		} else {
-			adapter->bat_pending = 0;
-		}
-		spin_unlock(&adapter->bat_tdt_lock);
 	}
 
 	return work_done;
@@ -4278,8 +4280,8 @@ next_desc:
 
 		/* return some buffers to hardware, one at a time is too 
 		   slow */
-		if (unlikely(cleaned_count >= ((adapter->paravirtual != 
-		    E1000_PARAVIRTUAL_NONE) ? E1000_RX_BUFFER_WRITE_BATCHING 
+		if (unlikely(cleaned_count >= ((adapter->paravirtual || 
+		    adapter->batching) ? E1000_RX_BUFFER_WRITE_BATCHING 
 			: E1000_RX_BUFFER_WRITE))) {
 			adapter->alloc_rx_buf(adapter, rx_ring, cleaned_count);
 			cleaned_count = 0;
@@ -4447,8 +4449,8 @@ next_desc:
 		rx_desc->status = 0;
 
 		/* return some buffers to hardware, one at a time is too slow */
-		if (unlikely(cleaned_count >= ((adapter->paravirtual != 
-		    E1000_PARAVIRTUAL_NONE) ? E1000_RX_BUFFER_WRITE_BATCHING
+		if (unlikely(cleaned_count >= ((adapter->paravirtual || 
+		    adapter->batching) ? E1000_RX_BUFFER_WRITE_BATCHING
 			: E1000_RX_BUFFER_WRITE))) {
 			adapter->alloc_rx_buf(adapter, rx_ring, cleaned_count);
 			cleaned_count = 0;
