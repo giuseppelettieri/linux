@@ -3116,6 +3116,7 @@ struct e1000_host_command_info {
 enum {
     RXHNTR = 0,	    /* ~ RDT */
     TXHNTS,	    /* ~ TDH */
+    RXNTFY,
     TXNTFY,
 
     RXSNTR,	    /* ~ rx_ring->next_to_clean ~ RDH */

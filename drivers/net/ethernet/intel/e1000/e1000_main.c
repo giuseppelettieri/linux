@@ -313,7 +313,8 @@ static void e1000_irq_disable(struct e1000_adapter *adapter)
 	struct e1000_hw *hw = &adapter->hw;
 
 	ew32(IMC, ~0);
-	E1000_WRITE_FLUSH();
+	if (!paravirtual)
+	    E1000_WRITE_FLUSH();
 	synchronize_irq(adapter->pdev->irq);
 }
 
@@ -327,7 +328,8 @@ static void e1000_irq_enable(struct e1000_adapter *adapter)
 	struct e1000_hw *hw = &adapter->hw;
 
 	ew32(IMS, IMS_ENABLE_MASK);
-	E1000_WRITE_FLUSH();
+	if (!paravirtual)
+	    E1000_WRITE_FLUSH();
 }
 
 static void e1000_update_mng_vlan(struct e1000_adapter *adapter)
@@ -995,7 +997,6 @@ static int __devinit e1000_probe(struct pci_dev *pdev,
 	adapter->bars = bars;
 	adapter->need_ioport = need_ioport;
 
-	adapter->paravirtual = paravirtual;
 	adapter->batching = batching;
 	spin_lock_init(&adapter->bat_tdt_lock);
 	adapter->bat_software_tdt = 0;
@@ -1420,7 +1421,7 @@ static int e1000_open(struct net_device *netdev)
 	adapter->csb[INTNTFY] = 1;
 	adapter->csb_phyaddr = virt_to_phys(adapter->csb);
 
-	if (adapter->paravirtual) {
+	if (paravirtual) {
 	    ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
 	    ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
 	} else {
@@ -3114,7 +3115,7 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	    wmb();
 
 	    tx_ring->next_to_use = i;
-	    if (!adapter->paravirtual || adapter->csb[TXNTFY]) {
+	    if (!paravirtual || adapter->csb[TXNTFY]) {
 		writel(i, hw->hw_addr + tx_ring->tdt);
 		/* we need this if more than one processor can write to our tail
 		 * at a time, it syncronizes IO on IA64/Altix systems */
@@ -3871,7 +3872,8 @@ static irqreturn_t e1000_intr(int irq, void *data)
 
 	/* disable interrupts, without the synchronize_irq bit */
 	ew32(IMC, ~0);
-	E1000_WRITE_FLUSH();
+	if (!paravirtual)
+	    E1000_WRITE_FLUSH();
 
 	if (likely(napi_schedule_prep(&adapter->napi))) {
 		adapter->total_tx_bytes = 0;
@@ -4280,7 +4282,7 @@ next_desc:
 
 		/* return some buffers to hardware, one at a time is too 
 		   slow */
-		if (unlikely(cleaned_count >= ((adapter->paravirtual || 
+		if (unlikely(cleaned_count >= ((paravirtual || 
 		    adapter->batching) ? E1000_RX_BUFFER_WRITE_BATCHING 
 			: E1000_RX_BUFFER_WRITE))) {
 			adapter->alloc_rx_buf(adapter, rx_ring, cleaned_count);
@@ -4449,7 +4451,7 @@ next_desc:
 		rx_desc->status = 0;
 
 		/* return some buffers to hardware, one at a time is too slow */
-		if (unlikely(cleaned_count >= ((adapter->paravirtual || 
+		if (unlikely(cleaned_count >= ((paravirtual || 
 		    adapter->batching) ? E1000_RX_BUFFER_WRITE_BATCHING
 			: E1000_RX_BUFFER_WRITE))) {
 			adapter->alloc_rx_buf(adapter, rx_ring, cleaned_count);
@@ -4552,12 +4554,14 @@ check_page:
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
 
-		/* Force memory writes to complete before letting h/w
-		 * know there are new descriptors to fetch.  (Only
-		 * applicable for weak-ordered memory model archs,
-		 * such as IA-64). */
-		wmb();
-		writel(i, adapter->hw.hw_addr + rx_ring->rdt);
+		if (!paravirtual || adapter->csb[RXNTFY]) {
+		    /* Force memory writes to complete before letting h/w
+		     * know there are new descriptors to fetch.  (Only
+		     * applicable for weak-ordered memory model archs,
+		     * such as IA-64). */
+		    wmb();
+		    writel(i, adapter->hw.hw_addr + rx_ring->rdt);
+		}
 	}
 }
 
@@ -4673,12 +4677,14 @@ map_skb:
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
 
-		/* Force memory writes to complete before letting h/w
-		 * know there are new descriptors to fetch.  (Only
-		 * applicable for weak-ordered memory model archs,
-		 * such as IA-64). */
-		wmb();
-		writel(i, hw->hw_addr + rx_ring->rdt);
+		if (!paravirtual || adapter->csb[RXNTFY]) {
+		    /* Force memory writes to complete before letting h/w
+		     * know there are new descriptors to fetch.  (Only
+		     * applicable for weak-ordered memory model archs,
+		     * such as IA-64). */
+		    wmb();
+		    writel(i, hw->hw_addr + rx_ring->rdt);
+		}
 	}
 }
 
