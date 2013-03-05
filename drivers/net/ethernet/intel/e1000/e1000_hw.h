@@ -1519,6 +1519,7 @@ struct e1000_hw {
 #define E1000_STATUS_FUSE_9       0x08000000
 #define E1000_STATUS_SERDES0_DIS  0x10000000	/* SERDES disabled on port 0 */
 #define E1000_STATUS_SERDES1_DIS  0x20000000	/* SERDES disabled on port 1 */
+#define E1000_STATUS_PARAVIRTUAL  0x40000000
 
 /* Constants used to interpret the masked PCI-X bus speed. */
 #define E1000_STATUS_PCIX_SPEED_66  0x00000000	/* PCI-X bus speed  50-66 MHz */

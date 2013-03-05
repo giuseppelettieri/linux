@@ -1389,6 +1389,7 @@ static int e1000_open(struct net_device *netdev)
 	struct e1000_adapter *adapter = netdev_priv(netdev);
 	struct e1000_hw *hw = &adapter->hw;
 	int err;
+	u32 status;
 
 	/* disallow open during test */
 	if (test_bit(__E1000_TESTING, &adapter->flags))
@@ -1421,13 +1422,18 @@ static int e1000_open(struct net_device *netdev)
 	adapter->csb[INTNTFY] = 1;
 	adapter->csb_phyaddr = virt_to_phys(adapter->csb);
 
-	if (paravirtual) {
-	    ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
-	    ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
-	} else {
-	    ew32(CSBBAH, 0);
-	    ew32(CSBBAL, 0);
-	}
+	status = er32(STATUS);
+	if (status & E1000_STATUS_PARAVIRTUAL) {
+	    if (paravirtual) {
+		ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
+		ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
+		printk("[e1000] paravirtual mode on\n");
+	    } else {
+		ew32(CSBBAH, 0);
+		ew32(CSBBAL, 0);
+	    }
+	} else
+	    paravirtual = 0;
 
 	e1000_power_up_phy(adapter);
 
