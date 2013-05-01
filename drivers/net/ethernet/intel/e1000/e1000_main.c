@@ -511,6 +511,12 @@ void e1000_down(struct e1000_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 	u32 rctl, tctl;
 
+	if (adapter->paravirtual) {
+		/* CSB deallocation protocol. */
+		adapter->csb->guest_csb_on = 0;
+		wmb();
+		ew32(CSBBAH, 0xFFFFFFFF);
+	}
 
 	/* disable receives in the hardware */
 	rctl = er32(RCTL);
@@ -1493,12 +1499,8 @@ static int e1000_close(struct net_device *netdev)
 	e1000_power_down_phy(adapter);
 	e1000_free_irq(adapter);
 
-	if (adapter->paravirtual) {
-		adapter->csb->guest_csb_on = 0;
-		wmb();
-		ew32(CSBBAH, 0xFFFFFFFF);
+	if (adapter->paravirtual)
 		kfree(adapter->csb);
-	}
 	e1000_free_all_tx_resources(adapter);
 	e1000_free_all_rx_resources(adapter);
 
