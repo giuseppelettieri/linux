@@ -3842,11 +3842,14 @@ static irqreturn_t e1000_intr(int irq, void *data)
 	}
 
 	/* disable interrupts, without the synchronize_irq bit */
-	ew32(IMC, ~0);
-	if (!adapter->paravirtual)
+	if (!adapter->paravirtual) {
+		ew32(IMC, ~0);
 		E1000_WRITE_FLUSH();
+	}
 
 	if (likely(napi_schedule_prep(&adapter->napi))) {
+		if (adapter->paravirtual && adapter->csb->guest_csb_on)
+			adapter->csb->guest_need_rxkick = adapter->csb->guest_need_txkick = 0;
 		adapter->total_tx_bytes = 0;
 		adapter->total_tx_packets = 0;
 		adapter->total_rx_bytes = 0;
@@ -3885,8 +3888,23 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 		if (likely(adapter->itr_setting & 3))
 			e1000_set_itr(adapter);
 		napi_complete(napi);
-		if (!test_bit(__E1000_DOWN, &adapter->flags))
-			e1000_irq_enable(adapter);
+		if (adapter->paravirtual && adapter->csb->guest_csb_on) {
+			adapter->csb->guest_need_rxkick = adapter->csb->guest_need_txkick = 1;
+			mb();
+			if (adapter->csb->host_rdh != adapter->rx_ring->next_to_clean ||
+				adapter->csb->host_tdh != adapter->tx_ring->next_to_clean) {
+				if (likely(napi_schedule_prep(&adapter->napi))) {
+					adapter->csb->guest_need_rxkick = 
+						adapter->csb->guest_need_txkick = 0;
+					__napi_schedule(&adapter->napi);
+					//XXX goto work; ???
+				}
+			}
+		} else {
+			if (!test_bit(__E1000_DOWN, &adapter->flags)) 
+				e1000_irq_enable(adapter);
+		}
+		
 	}
 
 	if (adapter->paravirtual)
