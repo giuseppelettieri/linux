@@ -1042,6 +1042,8 @@ struct e1000_ffvt_entry {
 #define E1000_FWSM      0x05B54	/* FW Semaphore */
 #define E1000_FFLT_DBG  0x05F04	/* Debug Register */
 #define E1000_HICR      0x08F00	/* Host Interface Control */
+#define E1000_CSBBAL	0x02830 /* CSB Base Address High */
+#define E1000_CSBBAH	0x02834 /* CSB Base Address Low */
 
 /* RSS registers */
 #define E1000_CPUVEC    0x02C10	/* CPU Vector Register - RW */
@@ -1274,6 +1276,8 @@ struct e1000_ffvt_entry {
 #define E1000_82542_RSSIR       E1000_RSSIR
 #define E1000_82542_KUMCTRLSTA E1000_KUMCTRLSTA
 #define E1000_82542_SW_FW_SYNC E1000_SW_FW_SYNC
+#define E1000_82542_CSBBAL	E1000_CSBBAL
+#define E1000_82542_CSBBAH	E1000_CSBBAH
 
 /* Statistics counters collected by the MAC */
 struct e1000_hw_stats {
@@ -3108,5 +3112,24 @@ struct e1000_host_command_info {
 #define AUTONEG_ADVERTISE_SPEED_DEFAULT 0x002F	/* Everything but 1000-Half */
 #define AUTONEG_ADVERTISE_10_100_ALL    0x000F	/* All 10/100 speeds */
 #define AUTONEG_ADVERTISE_10_ALL        0x0003	/* 10Mbps Full & Half speeds */
+
+#define E1000_PARAVIRT_SUBDEV 0x1101
+#define E1000_CSB_SIZE	4096
+struct e1000_csb {
+	uint32_t guest_tdt;
+	uint32_t guest_need_txkick;
+	uint32_t guest_need_rxkick;
+	uint32_t guest_csb_on;
+	uint32_t guest_rdt;
+	uint32_t pad[11];
+
+	uint32_t host_tdh;
+	uint32_t host_need_txkick;
+	uint32_t host_txcycles_lim;
+	uint32_t host_txcycles;
+	uint32_t host_rdh;
+	uint32_t host_need_rxkick;
+};
+
 
 #endif /* _E1000_HW_H_ */

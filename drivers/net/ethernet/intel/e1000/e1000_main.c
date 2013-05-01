@@ -187,6 +187,9 @@ module_param(copybreak, uint, 0644);
 MODULE_PARM_DESC(copybreak,
 	"Maximum size of packet that is copied to a new buffer on receive");
 
+static unsigned int paravirtual __read_mostly = 0;
+module_param(paravirtual, uint, 0444);
+
 static pci_ers_result_t e1000_io_error_detected(struct pci_dev *pdev,
                      pci_channel_state_t state);
 static pci_ers_result_t e1000_io_slot_reset(struct pci_dev *pdev);
@@ -304,7 +307,8 @@ static void e1000_irq_disable(struct e1000_adapter *adapter)
 	struct e1000_hw *hw = &adapter->hw;
 
 	ew32(IMC, ~0);
-	E1000_WRITE_FLUSH();
+	if (!adapter->paravirtual)
+		E1000_WRITE_FLUSH();
 	synchronize_irq(adapter->pdev->irq);
 }
 
@@ -317,7 +321,8 @@ static void e1000_irq_enable(struct e1000_adapter *adapter)
 	struct e1000_hw *hw = &adapter->hw;
 
 	ew32(IMS, IMS_ENABLE_MASK);
-	E1000_WRITE_FLUSH();
+	if (!adapter->paravirtual)
+		E1000_WRITE_FLUSH();
 }
 
 static void e1000_update_mng_vlan(struct e1000_adapter *adapter)
@@ -1033,7 +1038,7 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	netdev->netdev_ops = &e1000_netdev_ops;
 	e1000_set_ethtool_ops(netdev);
 	netdev->watchdog_timeo = 5 * HZ;
-	netif_napi_add(netdev, &adapter->napi, e1000_clean, 64);
+	netif_napi_add(netdev, &adapter->napi, e1000_clean, 128);
 
 	strncpy(netdev->name, pci_name(pdev), sizeof(netdev->name) - 1);
 
@@ -1206,6 +1211,12 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 			} else
 				break;
 		}
+	}
+
+	/* Probe for paravirtual device extension. */
+	adapter->paravirtual = (pdev->subsystem_device == E1000_PARAVIRT_SUBDEV);
+	if (adapter->paravirtual) {
+		printk("[e1000] Device supports paravirtualization\n");
 	}
 
 	/* reset the hardware with the new settings */
@@ -1383,6 +1394,37 @@ static int e1000_open(struct net_device *netdev)
 	if (err)
 		goto err_setup_rx;
 
+	adapter->csb = NULL;
+	if (adapter->paravirtual) {
+		/* Allocate the CSB.*/
+		adapter->csb = kmalloc(E1000_CSB_SIZE, GFP_KERNEL);
+		if (!adapter->csb) {
+			printk("Communication Status Block allocation failed!");
+			goto err_alloc_csb;
+		}
+		/* The first four values must match the register initial
+		   values set by e1000_configure_rx() and
+		   e1000_configure_tx(). */
+		adapter->csb->guest_tdt = 0;
+		adapter->csb->guest_rdt = 0;
+		adapter->csb->host_tdh = 0;
+		adapter->csb->host_rdh = 0;
+
+		adapter->csb->guest_csb_on = 0;
+		adapter->csb->host_need_txkick = 1;
+		adapter->csb->host_need_rxkick = 1;
+		adapter->csb->guest_need_txkick = 1;
+		adapter->csb->guest_need_rxkick = 1;
+		adapter->csb->host_txcycles_lim = 1;
+		adapter->csb->host_txcycles = 0;
+		adapter->csb_phyaddr = virt_to_phys(adapter->csb);
+
+		/* Tell the device the CSB physical address. */
+		ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
+		ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
+		//printk("CSBBAH=%lX CSBBAL=%lX\n", adapter->csb_phyaddr >> 32, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
+	}
+
 	e1000_power_up_phy(adapter);
 
 	adapter->mng_vlan_id = E1000_MNG_VLAN_NONE;
@@ -1418,6 +1460,9 @@ static int e1000_open(struct net_device *netdev)
 
 err_req_irq:
 	e1000_power_down_phy(adapter);
+	if (adapter->paravirtual)
+		kfree(adapter->csb);
+err_alloc_csb:
 	e1000_free_all_rx_resources(adapter);
 err_setup_rx:
 	e1000_free_all_tx_resources(adapter);
@@ -1448,6 +1493,12 @@ static int e1000_close(struct net_device *netdev)
 	e1000_power_down_phy(adapter);
 	e1000_free_irq(adapter);
 
+	if (adapter->paravirtual) {
+		adapter->csb->guest_csb_on = 0;
+		wmb();
+		ew32(CSBBAH, 0xFFFFFFFF);
+		kfree(adapter->csb);
+	}
 	e1000_free_all_tx_resources(adapter);
 	e1000_free_all_rx_resources(adapter);
 
@@ -3031,6 +3082,11 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	wmb();
 
 	tx_ring->next_to_use = i;
+	if (adapter->paravirtual) {
+		adapter->csb->guest_tdt = i;
+		if (adapter->csb->guest_csb_on && !adapter->csb->host_need_txkick)
+			return;
+	}
 	writel(i, hw->hw_addr + tx_ring->tdt);
 	/* we need this if more than one processor can write to our tail
 	 * at a time, it synchronizes IO on IA64/Altix systems
@@ -3275,6 +3331,8 @@ static netdev_tx_t e1000_xmit_frame(struct sk_buff *skb,
 		dev_kfree_skb_any(skb);
 		tx_ring->buffer_info[first].time_stamp = 0;
 		tx_ring->next_to_use = first;
+		if (adapter->paravirtual) //XXX
+			adapter->csb->guest_tdt = first;
 	}
 
 	return NETDEV_TX_OK;
@@ -3783,7 +3841,8 @@ static irqreturn_t e1000_intr(int irq, void *data)
 
 	/* disable interrupts, without the synchronize_irq bit */
 	ew32(IMC, ~0);
-	E1000_WRITE_FLUSH();
+	if (!adapter->paravirtual)
+		E1000_WRITE_FLUSH();
 
 	if (likely(napi_schedule_prep(&adapter->napi))) {
 		adapter->total_tx_bytes = 0;
@@ -3827,6 +3886,9 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 		if (!test_bit(__E1000_DOWN, &adapter->flags))
 			e1000_irq_enable(adapter);
 	}
+
+	if (adapter->paravirtual)
+		adapter->csb->guest_csb_on = paravirtual;
 
 	return work_done;
 }
@@ -3880,6 +3942,8 @@ static bool e1000_clean_tx_irq(struct e1000_adapter *adapter,
 	}
 
 	tx_ring->next_to_clean = i;
+	/*if (adapter->paravirtual)
+		adapter->csb->guest_tx_ntc = i; */
 
 	netdev_completed_queue(netdev, pkts_compl, bytes_compl);
 
@@ -4191,6 +4255,8 @@ next_desc:
 		buffer_info = next_buffer;
 	}
 	rx_ring->next_to_clean = i;
+	/*if (adapter->paravirtual)
+		adapter->csb->guest_rx_ntc = i; */
 
 	cleaned_count = E1000_DESC_UNUSED(rx_ring);
 	if (cleaned_count)
@@ -4356,6 +4422,8 @@ next_desc:
 		buffer_info = next_buffer;
 	}
 	rx_ring->next_to_clean = i;
+	/*if (adapter->paravirtual)
+		adapter->csb->guest_rx_ntc = i; */
 
 	cleaned_count = E1000_DESC_UNUSED(rx_ring);
 	if (cleaned_count)
@@ -4443,6 +4511,12 @@ check_page:
 		rx_ring->next_to_use = i;
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
+
+		if (adapter->paravirtual) {
+			adapter->csb->guest_rdt = i;
+			if (adapter->csb->guest_csb_on && !adapter->csb->host_need_rxkick)
+				return;
+		}
 
 		/* Force memory writes to complete before letting h/w
 		 * know there are new descriptors to fetch.  (Only
@@ -4562,6 +4636,12 @@ map_skb:
 		rx_ring->next_to_use = i;
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
+
+		if (adapter->paravirtual) {
+			adapter->csb->guest_rdt = i;
+			if (adapter->csb->guest_csb_on && !adapter->csb->host_need_rxkick)
+				return;
+		}
 
 		/* Force memory writes to complete before letting h/w
 		 * know there are new descriptors to fetch.  (Only
