@@ -533,13 +533,6 @@ void e1000_down(struct e1000_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 	u32 rctl, tctl;
 
-	if (adapter->paravirtual) {
-		/* CSB deallocation protocol. */
-		adapter->csb->guest_csb_on = 0;
-		wmb();
-		ew32(CSBBAH, 0xFFFFFFFF);
-	}
-
 	/* disable receives in the hardware */
 	rctl = er32(RCTL);
 	ew32(RCTL, rctl & ~E1000_RCTL_EN);
@@ -550,6 +543,12 @@ void e1000_down(struct e1000_adapter *adapter)
 #endif /* DEV_NETMAP */
 
 	netif_tx_disable(netdev);
+
+	if (adapter->paravirtual) {
+		/* CSB deallocation protocol. */
+		ew32(CSBBAH, 0);
+		ew32(CSBBAL, 0);
+	}
 
 	/* disable transmits in the hardware */
 	tctl = er32(TCTL);
@@ -1443,7 +1442,6 @@ static int e1000_open(struct net_device *netdev)
 		/* Tell the device the CSB physical address. */
 		ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
 		ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
-		//printk("CSBBAH=%lX CSBBAL=%lX\n", adapter->csb_phyaddr >> 32, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
 	}
 
 	e1000_power_up_phy(adapter);
