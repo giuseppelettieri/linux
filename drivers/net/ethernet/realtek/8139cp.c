@@ -78,6 +78,13 @@
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 
+#define PARAVIRT
+#ifdef PARAVIRT
+static unsigned int paravirtual __read_mostly = 0;
+module_param(paravirtual, uint, 0444);
+#endif /* PARAVIRT */
+
+
 /* These identify the driver base version and may not be removed. */
 static char version[] =
 DRV_NAME ": 10/100 PCI Ethernet driver v" DRV_VERSION " (" DRV_RELDATE ")\n";
@@ -166,6 +173,10 @@ enum {
 	TxThresh	= 0xEC, /* Early Tx threshold */
 	OldRxBufAddr	= 0x30, /* DMA address of Rx ring buffer (C mode) */
 	OldTSD0		= 0x10, /* DMA address of first Tx desc (C mode) */
+#ifdef PARAVIRT
+	CSBBAL		= 0xF0,
+	CSBBAH		= 0xF4,
+#endif /* PARAVIRT */
 
 	/* Tx and Rx status descriptors */
 	DescOwn		= (1 << 31), /* Descriptor is owned by NIC */
@@ -292,6 +303,27 @@ static const unsigned int cp_rx_config =
 	  (RX_FIFO_THRESH << RxCfgFIFOShift) |
 	  (RX_DMA_BURST << RxCfgDMAShift);
 
+#ifdef PARAVIRT
+#define RTL8139CP_PARAVIRT_SUBDEV 0x1101
+#define RTL8139CP_CSB_SIZE	4096
+struct paravirt_csb {
+	uint32_t guest_tdt;
+	uint32_t guest_need_txkick;
+	uint32_t guest_need_rxkick;
+	uint32_t guest_csb_on;
+	uint32_t guest_rdt;
+	uint32_t pad[11];
+
+	uint32_t host_tdh;
+	uint32_t host_need_txkick;
+	uint32_t host_txcycles_lim;
+	uint32_t host_txcycles;
+	uint32_t host_rdh;
+	uint32_t host_need_rxkick;
+	uint32_t host_isr;
+};
+#endif /* PARAVIRT */
+
 struct cp_desc {
 	__le32		opts1;
 	__le32		opts2;
@@ -348,6 +380,13 @@ struct cp_private {
 	dma_addr_t		ring_dma;
 
 	struct mii_if_info	mii_if;
+
+#ifdef PARAVIRT
+	int paravirtual;
+	struct paravirt_csb * csb;
+	unsigned long csb_phyaddr;
+#endif /* PARAVIRT */
+
 };
 
 #define cpr8(reg)	readb(cp->regs + (reg))
@@ -559,8 +598,17 @@ rx_next:
 	 */
 	if (rx < budget) {
 		unsigned long flags;
+#ifdef PARAVIRT
+		u16 status;
 
+		if (cp->paravirtual && cp->csb->guest_csb_on)
+			status = (u16)cp->csb->host_isr;
+		else
+			status = cpr16(IntrStatus);
+		if (status & cp_rx_intr_mask)
+#else
 		if (cpr16(IntrStatus) & cp_rx_intr_mask)
+#endif
 			goto rx_status_loop;
 
 		napi_gro_flush(napi, false);
@@ -586,7 +634,14 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 
 	spin_lock(&cp->lock);
 
+#ifdef PARAVIRT
+	if (cp->paravirtual && cp->csb->guest_csb_on)
+		status = (u16)cp->csb->host_isr;
+	else
+		status = cpr16(IntrStatus);
+#else
 	status = cpr16(IntrStatus);
+#endif
 	if (!status || (status == 0xFFFF))
 		goto out_unlock;
 
@@ -625,7 +680,10 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 
 		/* TODO: reset hardware */
 	}
-
+#ifdef PARAVIRT
+	if (cp->paravirtual)
+		cp->csb->guest_csb_on = paravirtual;
+#endif /* PARAVIRT */
 out_unlock:
 	spin_unlock(&cp->lock);
 
@@ -1165,6 +1223,40 @@ static int cp_open (struct net_device *dev)
 	if (rc)
 		return rc;
 
+#ifdef PARAVIRT
+	cp->csb = NULL;
+	if (cp->paravirtual) {
+		/* Allocate the CSB.*/
+		cp->csb = kmalloc(RTL8139CP_CSB_SIZE, GFP_KERNEL);
+		if (!cp->csb) {
+			printk("Communication Status Block allocation failed!");
+			goto err_alloc_csb;
+		}
+		/* The first four values must match the register initial
+		   values set by e1000_configure_rx() and
+		   e1000_configure_tx(). */
+		cp->csb->guest_tdt = 0;
+		cp->csb->guest_rdt = 0;
+		cp->csb->host_tdh = 0;
+		cp->csb->host_rdh = 0;
+
+		cp->csb->guest_csb_on = 0;
+		cp->csb->host_need_txkick = 1;
+		cp->csb->host_need_rxkick = 1;
+		cp->csb->guest_need_txkick = 1;
+		cp->csb->guest_need_rxkick = 1;
+		cp->csb->host_txcycles_lim = 1;
+		cp->csb->host_txcycles = 0;
+		cp->csb->host_isr = 0;
+		cp->csb_phyaddr = virt_to_phys(cp->csb);
+
+		/* Tell the device the CSB physical address. */
+		cpw32(CSBBAH, (cp->csb_phyaddr >> 32));
+		cpw32(CSBBAL, (cp->csb_phyaddr & 0x00000000ffffffffULL));
+		printk("CSBBAH=%lX CSBBAL=%llX\n", cp->csb_phyaddr >> 32, (cp->csb_phyaddr & 0x00000000ffffffffULL));
+	}
+#endif /* PARAVIRT */
+
 	napi_enable(&cp->napi);
 
 	cp_init_hw(cp);
@@ -1184,6 +1276,11 @@ static int cp_open (struct net_device *dev)
 err_out_hw:
 	napi_disable(&cp->napi);
 	cp_stop_hw(cp);
+#ifdef PARAVIRT
+	if (cp->paravirtual)
+		kfree(cp->csb);
+err_alloc_csb:
+#endif /* PARAVIRT */
 	cp_free_rings(cp);
 	return rc;
 }
@@ -1202,12 +1299,22 @@ static int cp_close (struct net_device *dev)
 	netif_stop_queue(dev);
 	netif_carrier_off(dev);
 
+	if (cp->paravirtual) {
+		/* CSB deallocation protocol. */
+		cpw32(CSBBAH, 0);
+		cpw32(CSBBAL, 0);
+	}
+
 	cp_stop_hw(cp);
 
 	spin_unlock_irqrestore(&cp->lock, flags);
 
 	free_irq(cp->pdev->irq, dev);
 
+#ifdef PARAVIRT
+	if (cp->paravirtual)
+		kfree(cp->csb);
+#endif /* PARAVIRT */
 	cp_free_rings(cp);
 	return 0;
 }
@@ -1943,6 +2050,14 @@ static int cp_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 	cp->regs = regs;
 
 	cp_stop_hw(cp);
+
+#ifdef PARAVIRT
+	/* Probe for paravirtual device extension. */
+	cp->paravirtual = (pdev->subsystem_device == RTL8139CP_PARAVIRT_SUBDEV);
+	if (cp->paravirtual) {
+		printk("[rtl8139cp] Device supports paravirtualization\n");
+	}
+#endif /* PARAVIRT */
 
 	/* read MAC address from EEPROM */
 	addr_len = read_eeprom (regs, 0, 8) == 0x8129 ? 8 : 6;
