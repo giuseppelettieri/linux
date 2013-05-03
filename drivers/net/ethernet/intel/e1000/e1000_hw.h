@@ -3115,21 +3115,6 @@ struct e1000_host_command_info {
 
 #define E1000_PARAVIRT_SUBDEV 0x1101
 #define E1000_CSB_SIZE	4096
-struct e1000_csb {
-	uint32_t guest_tdt;
-	uint32_t guest_need_txkick;
-	uint32_t guest_need_rxkick;
-	uint32_t guest_csb_on;
-	uint32_t guest_rdt;
-	uint32_t pad[11];
-
-	uint32_t host_tdh;
-	uint32_t host_need_txkick;
-	uint32_t host_txcycles_lim;
-	uint32_t host_txcycles;
-	uint32_t host_rdh;
-	uint32_t host_need_rxkick;
-};
-
+#include <linux/net_paravirt.h>
 
 #endif /* _E1000_HW_H_ */

@@ -316,7 +316,7 @@ struct e1000_adapter {
 	struct mutex mutex;
 
 	int paravirtual;		/* Set if device supports paravirtualization. */
-	struct e1000_csb * csb;		/* Communication Status Block */
+	struct paravirt_csb * csb;	/* Communication Status Block */
 	unsigned long csb_phyaddr;	/* CSB physical address. */
 };
 
