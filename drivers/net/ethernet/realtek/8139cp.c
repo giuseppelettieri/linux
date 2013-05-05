@@ -513,7 +513,12 @@ static int cp_rx_poll(struct napi_struct *napi, int budget)
 
 rx_status_loop:
 	rx = 0;
+#ifdef PARAVIRT
+	if (!cp->paravirtual || !cp->csb->guest_csb_on)
+		cpw16(IntrStatus, cp_rx_intr_mask);
+#else
 	cpw16(IntrStatus, cp_rx_intr_mask);
+#endif
 
 	while (1) {
 		u32 status, len;
@@ -598,23 +603,34 @@ rx_next:
 	 */
 	if (rx < budget) {
 		unsigned long flags;
-#ifdef PARAVIRT
-		u16 status;
 
-		if (cp->paravirtual && cp->csb->guest_csb_on)
-			status = (u16)cp->csb->host_isr;
-		else
-			status = cpr16(IntrStatus);
-		if (status & cp_rx_intr_mask)
+#ifdef PARAVIRT
+		if (!cp->paravirtual || !cp->csb->guest_csb_on)
+			if (cpr16(IntrStatus) & cp_rx_intr_mask)
+				goto rx_status_loop;
 #else
 		if (cpr16(IntrStatus) & cp_rx_intr_mask)
-#endif
 			goto rx_status_loop;
+#endif
 
 		napi_gro_flush(napi, false);
 		spin_lock_irqsave(&cp->lock, flags);
 		__napi_complete(napi);
+#ifdef PARAVIRT
+		if (cp->paravirtual && cp->csb->guest_csb_on) {
+			cp->csb->guest_need_rxkick = 1;
+			if (!(le32_to_cpu(cp->rx_ring[rx_tail].opts1) & DescOwn))
+				if (napi_schedule_prep(&cp->napi)) {
+					cp->csb->guest_need_rxkick = 0;
+					wmb();
+					cpw16(IntrStatus, cp_rx_intr_mask);
+					__napi_schedule(&cp->napi);
+				}
+		} else
+			cpw16_f(IntrMask, cp_intr_mask);
+#else
 		cpw16_f(IntrMask, cp_intr_mask);
+#endif
 		spin_unlock_irqrestore(&cp->lock, flags);
 	}
 
@@ -650,7 +666,8 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	netif_dbg(cp, intr, dev, "intr, status %04x cmd %02x cpcmd %04x\n",
 		  status, cpr8(Cmd), cpr16(CpCmd));
 
-	cpw16(IntrStatus, status & ~cp_rx_intr_mask);
+	if (status & ~cp_rx_intr_mask)
+		cpw16(IntrStatus, status & ~cp_rx_intr_mask);
 
 	/* close possible race's with dev_close */
 	if (unlikely(!netif_running(dev))) {
@@ -660,7 +677,16 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 
 	if (status & (RxOK | RxErr | RxEmpty | RxFIFOOvr))
 		if (napi_schedule_prep(&cp->napi)) {
+#ifdef PARAVIRT
+			if (cp->paravirtual && cp->csb->guest_csb_on) {
+				cp->csb->guest_need_rxkick = 0;
+				wmb();
+				cpw16(IntrStatus, cp_rx_intr_mask);
+			} else
+				cpw16_f(IntrMask, cp_norx_intr_mask);
+#else
 			cpw16_f(IntrMask, cp_norx_intr_mask);
+#endif
 			__napi_schedule(&cp->napi);
 		}
 
@@ -680,6 +706,7 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 
 		/* TODO: reset hardware */
 	}
+
 #ifdef PARAVIRT
 	if (cp->paravirtual)
 		cp->csb->guest_csb_on = paravirtual;
@@ -919,6 +946,10 @@ static netdev_tx_t cp_start_xmit (struct sk_buff *skb,
 
 	spin_unlock_irqrestore(&cp->lock, intr_flags);
 
+	if (cp->paravirtual) {
+		if (cp->csb->guest_csb_on && !cp->csb->host_need_txkick)
+			return NETDEV_TX_OK;
+	}
 	cpw8(TxPoll, NormalTxPoll);
 
 	return NETDEV_TX_OK;
@@ -1240,7 +1271,7 @@ static int cp_open (struct net_device *dev)
 		cp->csb->host_tdh = 0;
 		cp->csb->host_rdh = 0;
 
-		cp->csb->guest_csb_on = 0;
+		cp->csb->guest_csb_on = paravirtual;
 		cp->csb->host_need_txkick = 1;
 		cp->csb->host_need_rxkick = 1;
 		cp->csb->guest_need_txkick = 1;
