@@ -78,12 +78,9 @@
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 
-#define PARAVIRT
-#ifdef PARAVIRT
+
 static unsigned int paravirtual __read_mostly = 0;
 module_param(paravirtual, uint, 0444);
-#endif /* PARAVIRT */
-
 
 /* These identify the driver base version and may not be removed. */
 static char version[] =
@@ -173,10 +170,8 @@ enum {
 	TxThresh	= 0xEC, /* Early Tx threshold */
 	OldRxBufAddr	= 0x30, /* DMA address of Rx ring buffer (C mode) */
 	OldTSD0		= 0x10, /* DMA address of first Tx desc (C mode) */
-#ifdef PARAVIRT
 	CSBBAL		= 0xF0,
 	CSBBAH		= 0xF4,
-#endif /* PARAVIRT */
 
 	/* Tx and Rx status descriptors */
 	DescOwn		= (1 << 31), /* Descriptor is owned by NIC */
@@ -303,7 +298,6 @@ static const unsigned int cp_rx_config =
 	  (RX_FIFO_THRESH << RxCfgFIFOShift) |
 	  (RX_DMA_BURST << RxCfgDMAShift);
 
-#ifdef PARAVIRT
 #define RTL8139CP_PARAVIRT_SUBDEV 0x1101
 #define RTL8139CP_CSB_SIZE	4096
 struct paravirt_csb {
@@ -322,7 +316,6 @@ struct paravirt_csb {
 	uint32_t host_need_rxkick;
 	uint32_t host_isr;
 };
-#endif /* PARAVIRT */
 
 struct cp_desc {
 	__le32		opts1;
@@ -381,11 +374,9 @@ struct cp_private {
 
 	struct mii_if_info	mii_if;
 
-#ifdef PARAVIRT
 	int paravirtual;
 	struct paravirt_csb * csb;
 	unsigned long csb_phyaddr;
-#endif /* PARAVIRT */
 
 };
 
@@ -510,15 +501,12 @@ static int cp_rx_poll(struct napi_struct *napi, int budget)
 	struct net_device *dev = cp->dev;
 	unsigned int rx_tail = cp->rx_tail;
 	int rx;
+	int csb_mode = cp->paravirtual && cp->csb->guest_csb_on;
 
 rx_status_loop:
 	rx = 0;
-#ifdef PARAVIRT
-	if (!cp->paravirtual || !cp->csb->guest_csb_on)
+	if (!csb_mode)
 		cpw16(IntrStatus, cp_rx_intr_mask);
-#else
-	cpw16(IntrStatus, cp_rx_intr_mask);
-#endif
 
 	while (1) {
 		u32 status, len;
@@ -604,20 +592,14 @@ rx_next:
 	if (rx < budget) {
 		unsigned long flags;
 
-#ifdef PARAVIRT
-		if (!cp->paravirtual || !cp->csb->guest_csb_on)
+		if (!csb_mode)
 			if (cpr16(IntrStatus) & cp_rx_intr_mask)
 				goto rx_status_loop;
-#else
-		if (cpr16(IntrStatus) & cp_rx_intr_mask)
-			goto rx_status_loop;
-#endif
 
 		napi_gro_flush(napi, false);
 		spin_lock_irqsave(&cp->lock, flags);
 		__napi_complete(napi);
-#ifdef PARAVIRT
-		if (cp->paravirtual && cp->csb->guest_csb_on) {
+		if (csb_mode) {
 			cp->csb->guest_need_rxkick = 1;
 			if (!(le32_to_cpu(cp->rx_ring[rx_tail].opts1) & DescOwn))
 				if (napi_schedule_prep(&cp->napi)) {
@@ -628,9 +610,6 @@ rx_next:
 				}
 		} else
 			cpw16_f(IntrMask, cp_intr_mask);
-#else
-		cpw16_f(IntrMask, cp_intr_mask);
-#endif
 		spin_unlock_irqrestore(&cp->lock, flags);
 	}
 
@@ -643,21 +622,19 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	struct cp_private *cp;
 	int handled = 0;
 	u16 status;
+	int csb_mode;
 
 	if (unlikely(dev == NULL))
 		return IRQ_NONE;
 	cp = netdev_priv(dev);
+	csb_mode = cp->paravirtual && cp->csb->guest_csb_on;
 
 	spin_lock(&cp->lock);
 
-#ifdef PARAVIRT
-	if (cp->paravirtual && cp->csb->guest_csb_on)
+	if (csb_mode)
 		status = (u16)cp->csb->host_isr;
 	else
 		status = cpr16(IntrStatus);
-#else
-	status = cpr16(IntrStatus);
-#endif
 	if (!status || (status == 0xFFFF))
 		goto out_unlock;
 
@@ -677,16 +654,12 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 
 	if (status & (RxOK | RxErr | RxEmpty | RxFIFOOvr))
 		if (napi_schedule_prep(&cp->napi)) {
-#ifdef PARAVIRT
-			if (cp->paravirtual && cp->csb->guest_csb_on) {
+			if (csb_mode) {
 				cp->csb->guest_need_rxkick = 0;
 				wmb();
 				cpw16(IntrStatus, cp_rx_intr_mask);
 			} else
 				cpw16_f(IntrMask, cp_norx_intr_mask);
-#else
-			cpw16_f(IntrMask, cp_norx_intr_mask);
-#endif
 			__napi_schedule(&cp->napi);
 		}
 
@@ -707,10 +680,8 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 		/* TODO: reset hardware */
 	}
 
-#ifdef PARAVIRT
 	if (cp->paravirtual)
 		cp->csb->guest_csb_on = paravirtual;
-#endif /* PARAVIRT */
 out_unlock:
 	spin_unlock(&cp->lock);
 
@@ -946,10 +917,8 @@ static netdev_tx_t cp_start_xmit (struct sk_buff *skb,
 
 	spin_unlock_irqrestore(&cp->lock, intr_flags);
 
-	if (cp->paravirtual) {
-		if (cp->csb->guest_csb_on && !cp->csb->host_need_txkick)
-			return NETDEV_TX_OK;
-	}
+	if (cp->paravirtual && cp->csb->guest_csb_on && !cp->csb->host_need_txkick)
+		return NETDEV_TX_OK;
 	cpw8(TxPoll, NormalTxPoll);
 
 	return NETDEV_TX_OK;
@@ -1254,7 +1223,6 @@ static int cp_open (struct net_device *dev)
 	if (rc)
 		return rc;
 
-#ifdef PARAVIRT
 	cp->csb = NULL;
 	if (cp->paravirtual) {
 		/* Allocate the CSB.*/
@@ -1284,9 +1252,7 @@ static int cp_open (struct net_device *dev)
 		/* Tell the device the CSB physical address. */
 		cpw32(CSBBAH, (cp->csb_phyaddr >> 32));
 		cpw32(CSBBAL, (cp->csb_phyaddr & 0x00000000ffffffffULL));
-		printk("CSBBAH=%lX CSBBAL=%llX\n", cp->csb_phyaddr >> 32, (cp->csb_phyaddr & 0x00000000ffffffffULL));
 	}
-#endif /* PARAVIRT */
 
 	napi_enable(&cp->napi);
 
@@ -1307,11 +1273,9 @@ static int cp_open (struct net_device *dev)
 err_out_hw:
 	napi_disable(&cp->napi);
 	cp_stop_hw(cp);
-#ifdef PARAVIRT
 	if (cp->paravirtual)
 		kfree(cp->csb);
 err_alloc_csb:
-#endif /* PARAVIRT */
 	cp_free_rings(cp);
 	return rc;
 }
@@ -1342,10 +1306,8 @@ static int cp_close (struct net_device *dev)
 
 	free_irq(cp->pdev->irq, dev);
 
-#ifdef PARAVIRT
 	if (cp->paravirtual)
 		kfree(cp->csb);
-#endif /* PARAVIRT */
 	cp_free_rings(cp);
 	return 0;
 }
@@ -2082,13 +2044,11 @@ static int cp_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	cp_stop_hw(cp);
 
-#ifdef PARAVIRT
 	/* Probe for paravirtual device extension. */
 	cp->paravirtual = (pdev->subsystem_device == RTL8139CP_PARAVIRT_SUBDEV);
 	if (cp->paravirtual) {
 		printk("[rtl8139cp] Device supports paravirtualization\n");
 	}
-#endif /* PARAVIRT */
 
 	/* read MAC address from EEPROM */
 	addr_len = read_eeprom (regs, 0, 8) == 0x8129 ? 8 : 6;
