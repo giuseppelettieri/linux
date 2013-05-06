@@ -605,7 +605,6 @@ rx_next:
 				if (napi_schedule_prep(&cp->napi)) {
 					cp->csb->guest_need_rxkick = 0;
 					wmb();
-					cpw16(IntrStatus, cp_rx_intr_mask);
 					__napi_schedule(&cp->napi);
 				}
 		} else
@@ -623,6 +622,7 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	int handled = 0;
 	u16 status;
 	int csb_mode;
+	u16 ack = 0;
 
 	if (unlikely(dev == NULL))
 		return IRQ_NONE;
@@ -643,7 +643,9 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	netif_dbg(cp, intr, dev, "intr, status %04x cmd %02x cpcmd %04x\n",
 		  status, cpr8(Cmd), cpr16(CpCmd));
 
-	if (status & ~cp_rx_intr_mask)
+	if (csb_mode)
+		ack = status & ~cp_rx_intr_mask;
+	else
 		cpw16(IntrStatus, status & ~cp_rx_intr_mask);
 
 	/* close possible race's with dev_close */
@@ -652,22 +654,25 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 		goto out_unlock;
 	}
 
-	if (status & (RxOK | RxErr | RxEmpty | RxFIFOOvr))
+	if (status & (RxOK | RxErr | RxEmpty | RxFIFOOvr)) {
+		ack |= cp_rx_intr_mask;
 		if (napi_schedule_prep(&cp->napi)) {
 			if (csb_mode) {
 				cp->csb->guest_need_rxkick = 0;
 				wmb();
-				cpw16(IntrStatus, cp_rx_intr_mask);
 			} else
 				cpw16_f(IntrMask, cp_norx_intr_mask);
 			__napi_schedule(&cp->napi);
 		}
+	}
 
 	if (status & (TxOK | TxErr | TxEmpty | SWInt))
 		cp_tx(cp);
 	if (status & LinkChg)
 		mii_check_media(&cp->mii_if, netif_msg_link(cp), false);
 
+	if (csb_mode)
+		cpw16(IntrStatus, ack);
 
 	if (status & PciErr) {
 		u16 pci_status;
