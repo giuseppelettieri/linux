@@ -81,6 +81,11 @@
 
 static unsigned int paravirtual __read_mostly = 0;
 module_param(paravirtual, uint, 0444);
+MODULE_PARM_DESC (paravirtual, "8139cp: enable paravirtual mode");
+
+static unsigned int moderation __read_mostly = 0;
+module_param(moderation, uint, 0644);
+MODULE_PARM_DESC (moderation, "8139cp: enable TX/RX interrupt moderation (in us)");
 
 /* These identify the driver base version and may not be removed. */
 static char version[] =
@@ -150,9 +155,11 @@ enum {
 	TxConfig	= 0x40, /* Tx configuration */
 	ChipVersion	= 0x43, /* 8-bit chip version, inside TxConfig */
 	RxConfig	= 0x44, /* Rx configuration */
+	TimerCtrl	= 0x48, /* Timer control. */
 	RxMissed	= 0x4C,	/* 24 bits valid, write clears */
 	Cfg9346		= 0x50, /* EEPROM select/control; Cfg reg [un]lock */
 	Config1		= 0x52, /* Config1 */
+	TimerInt	= 0x54,	/* Timer interval */
 	Config3		= 0x59, /* Config3 */
 	Config4		= 0x5A, /* Config4 */
 	MultiIntr	= 0x5C, /* Multiple interrupt select */
@@ -374,7 +381,9 @@ struct cp_private {
 
 	struct mii_if_info	mii_if;
 
-	int paravirtual;
+	unsigned moderation;
+
+	unsigned paravirtual;
 	struct paravirt_csb * csb;
 	unsigned long csb_phyaddr;
 
@@ -622,7 +631,6 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	int handled = 0;
 	u16 status;
 	int csb_mode;
-	u16 ack = 0;
 
 	if (unlikely(dev == NULL))
 		return IRQ_NONE;
@@ -643,9 +651,7 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	netif_dbg(cp, intr, dev, "intr, status %04x cmd %02x cpcmd %04x\n",
 		  status, cpr8(Cmd), cpr16(CpCmd));
 
-	if (csb_mode)
-		ack = status & ~cp_rx_intr_mask;
-	else
+	if (!csb_mode)
 		cpw16(IntrStatus, status & ~cp_rx_intr_mask);
 
 	/* close possible race's with dev_close */
@@ -654,8 +660,7 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 		goto out_unlock;
 	}
 
-	if (status & (RxOK | RxErr | RxEmpty | RxFIFOOvr)) {
-		ack |= cp_rx_intr_mask;
+	if (status & (RxOK | RxErr | RxEmpty | RxFIFOOvr))
 		if (napi_schedule_prep(&cp->napi)) {
 			if (csb_mode) {
 				cp->csb->guest_need_rxkick = 0;
@@ -664,15 +669,19 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 				cpw16_f(IntrMask, cp_norx_intr_mask);
 			__napi_schedule(&cp->napi);
 		}
-	}
 
 	if (status & (TxOK | TxErr | TxEmpty | SWInt))
 		cp_tx(cp);
 	if (status & LinkChg)
 		mii_check_media(&cp->mii_if, netif_msg_link(cp), false);
 
-	if (csb_mode)
-		cpw16(IntrStatus, ack);
+	if (csb_mode) {
+		if (unlikely(cp->moderation != moderation)) {
+			cp->moderation = moderation;
+			cpw32(IntrMitigate, cp->moderation);
+		}
+		cpw16(IntrStatus, status);
+	}
 
 	if (status & PciErr) {
 		u16 pci_status;
@@ -1100,6 +1109,8 @@ static void cp_init_hw (struct cp_private *cp)
 	cpw16(MultiIntr, 0);
 
 	cpw8_f(Cfg9346, Cfg9346_Lock);
+
+	cpw32(TimerInt, 0);
 }
 
 static int cp_refill_rx(struct cp_private *cp)
@@ -2048,6 +2059,8 @@ static int cp_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 	cp->regs = regs;
 
 	cp_stop_hw(cp);
+
+	cp->moderation = 0;
 
 	/* Probe for paravirtual device extension. */
 	cp->paravirtual = (pdev->subsystem_device == RTL8139CP_PARAVIRT_SUBDEV);
