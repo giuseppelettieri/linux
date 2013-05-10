@@ -48,6 +48,9 @@ struct paravirt_csb {
     uint32_t host_txcycles;        /* gr0 hw- counter, but no need to be exported */
     uint32_t host_rdh;             /* hw+ gr0 shadow register, mostly unused */
     uint32_t host_need_rxkick;     /* hw- gr+ flush rx queued packets */
+    uint32_t host_isr;
 };
+
+#define PARAVIRT_CSB_SIZE   4096
 
 #endif
