@@ -292,6 +292,9 @@ static const unsigned int cp_rx_config =
 	  (RX_FIFO_THRESH << RxCfgFIFOShift) |
 	  (RX_DMA_BURST << RxCfgDMAShift);
 
+#define RTL8139CP_PARAVIRT_SUBDEV 0x1101
+#include <linux/net_paravirt.h>
+
 struct cp_desc {
 	__le32		opts1;
 	__le32		opts2;
@@ -618,6 +621,13 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	if (status & LinkChg)
 		mii_check_media(&cp->mii_if, netif_msg_link(cp), false);
 
+	if (csb_mode) {
+		if (unlikely(cp->moderation != moderation)) {
+			cp->moderation = moderation;
+			cpw16(IntrMitigate, (u16)cp->moderation);
+		}
+		cpw16(IntrStatus, status);
+	}
 
 	if (status & PciErr) {
 		u16 pci_status;
@@ -630,6 +640,8 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 		/* TODO: reset hardware */
 	}
 
+	if (unlikely(cp->paravirtual && cp->csb->guest_csb_on != paravirtual))
+		cp->csb->guest_csb_on = paravirtual;
 out_unlock:
 	spin_unlock(&cp->lock);
 
@@ -1204,6 +1216,37 @@ static int cp_open (struct net_device *dev)
 	rc = cp_alloc_rings(cp);
 	if (rc)
 		return rc;
+
+	cp->csb = NULL;
+	if (cp->paravirtual) {
+		/* Allocate the CSB.*/
+		cp->csb = kmalloc(PARAVIRT_CSB_SIZE, GFP_KERNEL);
+		if (!cp->csb) {
+			printk("Communication Status Block allocation failed!");
+			goto err_alloc_csb;
+		}
+		/* The first four values must match the register initial
+		   values set by e1000_configure_rx() and
+		   e1000_configure_tx(). */
+		cp->csb->guest_tdt = 0;
+		cp->csb->guest_rdt = 0;
+		cp->csb->host_tdh = 0;
+		cp->csb->host_rdh = 0;
+
+		cp->csb->guest_csb_on = paravirtual;
+		cp->csb->host_need_txkick = 1;
+		cp->csb->host_need_rxkick = 1;
+		cp->csb->guest_need_txkick = 1;
+		cp->csb->guest_need_rxkick = 1;
+		cp->csb->host_txcycles_lim = 1;
+		cp->csb->host_txcycles = 0;
+		cp->csb->host_isr = 0;
+		cp->csb_phyaddr = virt_to_phys(cp->csb);
+
+		/* Tell the device the CSB physical address. */
+		cpw32(CSBBAH, (cp->csb_phyaddr >> 32));
+		cpw32(CSBBAL, (cp->csb_phyaddr & 0x00000000ffffffffULL));
+	}
 
 	napi_enable(&cp->napi);
 
