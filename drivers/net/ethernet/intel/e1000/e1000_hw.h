@@ -3114,7 +3114,6 @@ struct e1000_host_command_info {
 #define AUTONEG_ADVERTISE_10_ALL        0x0003	/* 10Mbps Full & Half speeds */
 
 #define E1000_PARAVIRT_SUBDEV 0x1101
-#define E1000_CSB_SIZE	4096
 #include <linux/net_paravirt.h>
 
 #endif /* _E1000_HW_H_ */
