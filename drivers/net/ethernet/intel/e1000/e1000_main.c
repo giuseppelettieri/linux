@@ -1417,7 +1417,7 @@ static int e1000_open(struct net_device *netdev)
 	adapter->csb = NULL;
 	if (adapter->paravirtual) {
 		/* Allocate the CSB.*/
-		adapter->csb = kmalloc(E1000_CSB_SIZE, GFP_KERNEL);
+		adapter->csb = kmalloc(PARAVIRT_CSB_SIZE, GFP_KERNEL);
 		if (!adapter->csb) {
 			printk("Communication Status Block allocation failed!");
 			goto err_alloc_csb;
@@ -3856,6 +3856,10 @@ static irqreturn_t e1000_intr(int irq, void *data)
 			e1000_irq_enable(adapter);
 	}
 
+	if (unlikely(adapter->paravirtual &&
+			adapter->csb->guest_csb_on != paravirtual))
+		adapter->csb->guest_csb_on = paravirtual;
+
 	return IRQ_HANDLED;
 }
 
@@ -3899,9 +3903,6 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 		}
 		
 	}
-
-	if (adapter->paravirtual)
-		adapter->csb->guest_csb_on = paravirtual;
 
 	return work_done;
 }
