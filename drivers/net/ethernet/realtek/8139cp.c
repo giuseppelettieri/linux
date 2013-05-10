@@ -306,23 +306,7 @@ static const unsigned int cp_rx_config =
 	  (RX_DMA_BURST << RxCfgDMAShift);
 
 #define RTL8139CP_PARAVIRT_SUBDEV 0x1101
-#define RTL8139CP_CSB_SIZE	4096
-struct paravirt_csb {
-	uint32_t guest_tdt;
-	uint32_t guest_need_txkick;
-	uint32_t guest_need_rxkick;
-	uint32_t guest_csb_on;
-	uint32_t guest_rdt;
-	uint32_t pad[11];
-
-	uint32_t host_tdh;
-	uint32_t host_need_txkick;
-	uint32_t host_txcycles_lim;
-	uint32_t host_txcycles;
-	uint32_t host_rdh;
-	uint32_t host_need_rxkick;
-	uint32_t host_isr;
-};
+#include <linux/net_paravirt.h>
 
 struct cp_desc {
 	__le32		opts1;
@@ -678,7 +662,7 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 	if (csb_mode) {
 		if (unlikely(cp->moderation != moderation)) {
 			cp->moderation = moderation;
-			cpw32(IntrMitigate, cp->moderation);
+			cpw16(IntrMitigate, (u16)cp->moderation);
 		}
 		cpw16(IntrStatus, status);
 	}
@@ -694,7 +678,7 @@ static irqreturn_t cp_interrupt (int irq, void *dev_instance)
 		/* TODO: reset hardware */
 	}
 
-	if (cp->paravirtual)
+	if (unlikely(cp->paravirtual && cp->csb->guest_csb_on != paravirtual))
 		cp->csb->guest_csb_on = paravirtual;
 out_unlock:
 	spin_unlock(&cp->lock);
@@ -1243,7 +1227,7 @@ static int cp_open (struct net_device *dev)
 	cp->csb = NULL;
 	if (cp->paravirtual) {
 		/* Allocate the CSB.*/
-		cp->csb = kmalloc(RTL8139CP_CSB_SIZE, GFP_KERNEL);
+		cp->csb = kmalloc(PARAVIRT_CSB_SIZE, GFP_KERNEL);
 		if (!cp->csb) {
 			printk("Communication Status Block allocation failed!");
 			goto err_alloc_csb;
