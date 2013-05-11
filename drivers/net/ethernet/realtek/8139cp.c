@@ -125,6 +125,9 @@ MODULE_PARM_DESC (multicast_filter_limit, "8139cp: maximum number of filtered mu
 	(((CP)->tx_tail <= (CP)->tx_head) ?			\
 	  (CP)->tx_tail + (CP_TX_RING_SIZE - 1) - (CP)->tx_head :	\
 	  (CP)->tx_tail - (CP)->tx_head - 1)
+#define TX_BUFFS_TO_CLEAN(CP)					\
+	((((CP)->tx_head < (CP)->tx_tail) ? (CP_TX_RING_SIZE) : 0) \
+	 + (CP)->tx_head - (CP)->tx_tail)
 
 #define PKT_BUF_SZ		1536	/* Size of each temporary Rx buffer.*/
 #define CP_INTERNAL_PHY		32
@@ -707,7 +710,7 @@ static void cp_tx (struct cp_private *cp)
 	unsigned tx_head = cp->tx_head;
 	unsigned tx_tail = cp->tx_tail;
 	unsigned bytes_compl = 0, pkts_compl = 0;
-	int csb_mode = cp->paravirtual && cp->csb->guest_csb_on; 
+	int csb_mode = cp->paravirtual && cp->csb->guest_csb_on;
 
 	while (tx_tail != tx_head) {
 		struct cp_desc *txd = cp->tx_ring + tx_tail;
@@ -765,7 +768,7 @@ static void cp_tx (struct cp_private *cp)
 	if (TX_BUFFS_AVAIL(cp) > (MAX_SKB_FRAGS + 1)) {
 		netif_wake_queue(cp->dev);
 		if (csb_mode)
-			cp->csb->guest_need_txkick = 0;
+			cp->csb->guest_request_txkick = CP_TX_RING_SIZE + 1;
 	}
 }
 
@@ -927,14 +930,11 @@ static netdev_tx_t cp_start_xmit (struct sk_buff *skb,
 	if (TX_BUFFS_AVAIL(cp) <= (MAX_SKB_FRAGS + 1)) {
 		netif_stop_queue(dev);
 		if (csb_mode) {
-			cp->csb->guest_need_txkick = 1;
+			cp->csb->guest_request_txkick = 
+				(cp->tx_tail + TX_BUFFS_TO_CLEAN(cp) * 3/4) % CP_TX_RING_SIZE;
 			wmb();
 			/* Double check. */
 			cp_tx(cp);
-			if (unlikely(TX_BUFFS_AVAIL(cp) > (MAX_SKB_FRAGS + 1))) {
-				cp->csb->guest_need_txkick = 0;
-				netif_wake_queue(dev);
-			}
 		}
 	}
 
@@ -1268,8 +1268,9 @@ static int cp_open (struct net_device *dev)
 		cp->csb->guest_csb_on = paravirtual;
 		cp->csb->host_need_txkick = 1;
 		cp->csb->host_need_rxkick = 1;
-		cp->csb->guest_need_txkick = 1;
+		cp->csb->guest_need_txkick = 0;
 		cp->csb->guest_need_rxkick = 1;
+		cp->csb->guest_request_txkick = CP_TX_RING_SIZE + 1; /* Disable */
 		cp->csb->host_txcycles_lim = 1;
 		cp->csb->host_txcycles = 0;
 		cp->csb->host_isr = 0;
