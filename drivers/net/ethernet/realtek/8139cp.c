@@ -707,6 +707,7 @@ static void cp_tx (struct cp_private *cp)
 	unsigned tx_head = cp->tx_head;
 	unsigned tx_tail = cp->tx_tail;
 	unsigned bytes_compl = 0, pkts_compl = 0;
+	int csb_mode = cp->paravirtual && cp->csb->guest_csb_on; 
 
 	while (tx_tail != tx_head) {
 		struct cp_desc *txd = cp->tx_ring + tx_tail;
@@ -759,9 +760,13 @@ static void cp_tx (struct cp_private *cp)
 
 	cp->tx_tail = tx_tail;
 
-	netdev_completed_queue(cp->dev, pkts_compl, bytes_compl);
-	if (TX_BUFFS_AVAIL(cp) > (MAX_SKB_FRAGS + 1))
+	if (!csb_mode)
+		netdev_completed_queue(cp->dev, pkts_compl, bytes_compl);
+	if (TX_BUFFS_AVAIL(cp) > (MAX_SKB_FRAGS + 1)) {
 		netif_wake_queue(cp->dev);
+		if (csb_mode)
+			cp->csb->guest_need_txkick = 0;
+	}
 }
 
 static inline u32 cp_tx_vlan_tag(struct sk_buff *skb)
@@ -779,6 +784,7 @@ static netdev_tx_t cp_start_xmit (struct sk_buff *skb,
 	unsigned long intr_flags;
 	__le32 opts2;
 	int mss = 0;
+	int csb_mode = (cp->paravirtual && cp->csb->guest_csb_on);
 
 	spin_lock_irqsave(&cp->lock, intr_flags);
 
@@ -789,6 +795,9 @@ static netdev_tx_t cp_start_xmit (struct sk_buff *skb,
 		netdev_err(dev, "BUG! Tx Ring full when queue awake!\n");
 		return NETDEV_TX_BUSY;
 	}
+
+	if (csb_mode)
+		cp_tx(cp);
 
 	entry = cp->tx_head;
 	eor = (entry == (CP_TX_RING_SIZE - 1)) ? RingEnd : 0;
@@ -907,15 +916,31 @@ static netdev_tx_t cp_start_xmit (struct sk_buff *skb,
 	}
 	cp->tx_head = entry;
 
-	netdev_sent_queue(dev, skb->len);
+	if (csb_mode) {
+		skb_orphan(skb);
+		nf_reset(skb);
+	} else
+		netdev_sent_queue(dev, skb->len);
 	netif_dbg(cp, tx_queued, cp->dev, "tx queued, slot %d, skblen %d\n",
 		  entry, skb->len);
-	if (TX_BUFFS_AVAIL(cp) <= (MAX_SKB_FRAGS + 1))
+	
+	if (TX_BUFFS_AVAIL(cp) <= (MAX_SKB_FRAGS + 1)) {
 		netif_stop_queue(dev);
+		if (csb_mode) {
+			cp->csb->guest_need_txkick = 1;
+			wmb();
+			/* Double check. */
+			cp_tx(cp);
+			if (unlikely(TX_BUFFS_AVAIL(cp) > (MAX_SKB_FRAGS + 1))) {
+				cp->csb->guest_need_txkick = 0;
+				netif_wake_queue(dev);
+			}
+		}
+	}
 
 	spin_unlock_irqrestore(&cp->lock, intr_flags);
 
-	if (cp->paravirtual && cp->csb->guest_csb_on && !cp->csb->host_need_txkick)
+	if (csb_mode && !cp->csb->host_need_txkick)
 		return NETDEV_TX_OK;
 	cpw8(TxPoll, NormalTxPoll);
 
@@ -2049,9 +2074,8 @@ static int cp_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* Probe for paravirtual device extension. */
 	cp->paravirtual = (pdev->subsystem_device == RTL8139CP_PARAVIRT_SUBDEV);
-	if (cp->paravirtual) {
+	if (cp->paravirtual)
 		printk("[rtl8139cp] Device supports paravirtualization\n");
-	}
 
 	/* read MAC address from EEPROM */
 	addr_len = read_eeprom (regs, 0, 8) == 0x8129 ? 8 : 6;
