@@ -723,6 +723,9 @@ static void cp_tx (struct cp_private *cp)
 	netdev_completed_queue(cp->dev, pkts_compl, bytes_compl);
 	if (TX_BUFFS_AVAIL(cp) > (MAX_SKB_FRAGS + 1))
 		netif_wake_queue(cp->dev);
+		if (csb_mode)
+			cp->csb->guest_need_txkick_at = CP_TX_RING_SIZE + 1;
+	}
 }
 
 static inline u32 cp_tx_vlan_tag(struct sk_buff *skb)
@@ -900,6 +903,14 @@ static netdev_tx_t cp_start_xmit (struct sk_buff *skb,
 		  entry, skb->len);
 	if (TX_BUFFS_AVAIL(cp) <= (MAX_SKB_FRAGS + 1))
 		netif_stop_queue(dev);
+		if (csb_mode) {
+			cp->csb->guest_need_txkick_at = 
+				(cp->tx_tail + TX_BUFFS_TO_CLEAN(cp) * 3/4) % CP_TX_RING_SIZE;
+			wmb();
+			/* Double check. */
+			cp_tx(cp);
+		}
+	}
 
 out_unlock:
 	spin_unlock_irqrestore(&cp->lock, intr_flags);
@@ -1238,6 +1249,7 @@ static int cp_open (struct net_device *dev)
 		cp->csb->host_need_rxkick = 1;
 		cp->csb->guest_need_txkick = 1;
 		cp->csb->guest_need_rxkick = 1;
+		cp->csb->guest_need_txkick_at = CP_TX_RING_SIZE + 1; /* Disable */
 		cp->csb->host_txcycles_lim = 1;
 		cp->csb->host_txcycles = 0;
 		cp->csb->host_isr = 0;

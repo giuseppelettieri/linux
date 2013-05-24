@@ -1430,10 +1430,11 @@ static int e1000_open(struct net_device *netdev)
 		adapter->csb->host_tdh = 0;
 		adapter->csb->host_rdh = 0;
 
-		adapter->csb->guest_csb_on = 0;
+		adapter->csb->guest_csb_on = paravirtual ? 1 : 0;
 		adapter->csb->host_need_txkick = 1;
 		adapter->csb->host_need_rxkick = 1;
-		adapter->csb->guest_need_txkick = 1;
+		/*adapter->csb->guest_need_txkick = 0; */ /* Obsolete and unused. */
+		adapter->csb->guest_need_txkick_at = 0;
 		adapter->csb->guest_need_rxkick = 1;
 		adapter->csb->host_txcycles_lim = 1;
 		adapter->csb->host_txcycles = 0;
@@ -3841,8 +3842,10 @@ static irqreturn_t e1000_intr(int irq, void *data)
 	}
 
 	if (likely(napi_schedule_prep(&adapter->napi))) {
-		if (adapter->paravirtual && adapter->csb->guest_csb_on)
-			adapter->csb->guest_need_rxkick = adapter->csb->guest_need_txkick = 0;
+		if (adapter->paravirtual && adapter->csb->guest_csb_on) {
+			adapter->csb->guest_need_rxkick = 0;
+			adapter->csb->guest_need_txkick_at = ~0;
+		}
 		adapter->total_tx_bytes = 0;
 		adapter->total_tx_packets = 0;
 		adapter->total_rx_bytes = 0;
@@ -3856,10 +3859,6 @@ static irqreturn_t e1000_intr(int irq, void *data)
 			e1000_irq_enable(adapter);
 	}
 
-	if (unlikely(adapter->paravirtual &&
-			adapter->csb->guest_csb_on != paravirtual))
-		adapter->csb->guest_csb_on = paravirtual;
-
 	return IRQ_HANDLED;
 }
 
@@ -3872,6 +3871,7 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 	struct e1000_adapter *adapter = container_of(napi, struct e1000_adapter,
 						     napi);
 	int tx_clean_complete = 0, work_done = 0;
+	struct e1000_tx_desc * txd = NULL;
 
 	tx_clean_complete = e1000_clean_tx_irq(adapter, &adapter->tx_ring[0]);
 
@@ -3886,15 +3886,16 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 			e1000_set_itr(adapter);
 		napi_complete(napi);
 		if (adapter->paravirtual && adapter->csb->guest_csb_on) {
-			adapter->csb->guest_need_rxkick = adapter->csb->guest_need_txkick = 1;
+			adapter->csb->guest_need_rxkick = 1;
+			adapter->csb->guest_need_txkick_at = adapter->tx_ring->next_to_clean;
 			mb();
+			txd = E1000_TX_DESC(adapter->tx_ring[0], adapter->tx_ring->next_to_clean);
 			if (adapter->csb->host_rdh != adapter->rx_ring->next_to_clean ||
-				adapter->csb->host_tdh != adapter->tx_ring->next_to_clean) {
+				(txd->upper.data & cpu_to_le32(E1000_TXD_STAT_DD))) {
 				if (likely(napi_schedule_prep(&adapter->napi))) {
-					adapter->csb->guest_need_rxkick = 
-						adapter->csb->guest_need_txkick = 0;
+					adapter->csb->guest_need_rxkick = 0;
+					adapter->csb->guest_need_txkick_at = ~0;
 					__napi_schedule(&adapter->napi);
-					//XXX goto work; ???
 				}
 			}
 		} else {
@@ -3960,8 +3961,6 @@ static bool e1000_clean_tx_irq(struct e1000_adapter *adapter,
 	}
 
 	tx_ring->next_to_clean = i;
-	/*if (adapter->paravirtual)
-		adapter->csb->guest_tx_ntc = i; */
 
 	netdev_completed_queue(netdev, pkts_compl, bytes_compl);
 
@@ -4272,8 +4271,6 @@ next_desc:
 		buffer_info = next_buffer;
 	}
 	rx_ring->next_to_clean = i;
-	/*if (adapter->paravirtual)
-		adapter->csb->guest_rx_ntc = i; */
 
 	cleaned_count = E1000_DESC_UNUSED(rx_ring);
 	if (cleaned_count)
@@ -4444,8 +4441,6 @@ next_desc:
 		buffer_info = next_buffer;
 	}
 	rx_ring->next_to_clean = i;
-	/*if (adapter->paravirtual)
-		adapter->csb->guest_rx_ntc = i; */
 
 	cleaned_count = E1000_DESC_UNUSED(rx_ring);
 	if (cleaned_count)
