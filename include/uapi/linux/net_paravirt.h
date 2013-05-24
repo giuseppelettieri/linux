@@ -38,7 +38,7 @@ struct paravirt_csb {
     uint32_t guest_need_rxkick;    /* gw- hr+ ran out of rx pkts, request kick  */
     uint32_t guest_csb_on;         /* gw- hr+ enable paravirtual mode */
     uint32_t guest_rdt;            /* gw+ hr+ rx buffers available */
-    uint32_t guest_request_txkick;
+    uint32_t guest_need_txkick_at;
     uint32_t pad[10];
 
     /* these are (mostly) written by the host */
