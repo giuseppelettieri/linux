@@ -319,9 +319,9 @@ struct e1000_adapter {
 
 	struct mutex mutex;
 
-	int paravirtual;		/* Set if device supports paravirtualization. */
 	struct paravirt_csb * csb;	/* Communication Status Block */
 	unsigned long csb_phyaddr;	/* CSB physical address. */
+	unsigned csb_mode;	/* = adapter->csb && adapter->csb_guest_csb_on */
 };
 
 enum e1000_state_t {
