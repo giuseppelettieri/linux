@@ -1427,9 +1427,9 @@ static int e1000_open(struct net_device *netdev)
 		adapter->csb->guest_csb_on = paravirtual ? 1 : 0;
 		adapter->csb->host_need_txkick = 1;
 		adapter->csb->host_need_rxkick = 1;
-		adapter->csb->host_need_rxkick_at = NET_PARAVIRT_NONE;
+		adapter->csb->host_rxkick_at = NET_PARAVIRT_NONE;
 		adapter->csb->guest_need_txkick = 1;
-		adapter->csb->guest_need_txkick_at = NET_PARAVIRT_NONE;
+		adapter->csb->guest_txkick_at = NET_PARAVIRT_NONE;
 		adapter->csb->guest_need_rxkick = 1;
 		adapter->csb->host_txcycles_lim = 1;
 		adapter->csb->host_txcycles = 0;
@@ -4527,7 +4527,7 @@ check_page:
 		if (adapter->csb_mode) {
 			adapter->csb->guest_rdt = i;
 			mb();
-			if (i == adapter->csb->host_need_rxkick_at)
+			if (i == adapter->csb->host_rxkick_at)
 				writel(i, adapter->hw.hw_addr + rx_ring->rdt);
 
 		}
@@ -4655,7 +4655,7 @@ map_skb:
 		if (adapter->csb_mode) {
 			adapter->csb->guest_rdt = i;
 			mb();
-			if (i == adapter->csb->host_need_rxkick_at)
+			if (i == adapter->csb->host_rxkick_at)
 				writel(i, adapter->hw.hw_addr + rx_ring->rdt);
 
 		}
