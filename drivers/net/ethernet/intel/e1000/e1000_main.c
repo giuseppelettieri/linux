@@ -313,8 +313,7 @@ static void e1000_irq_disable(struct e1000_adapter *adapter)
 	struct e1000_hw *hw = &adapter->hw;
 
 	ew32(IMC, ~0);
-	if (!adapter->paravirtual)
-		E1000_WRITE_FLUSH();
+	E1000_WRITE_FLUSH();
 	synchronize_irq(adapter->pdev->irq);
 }
 
@@ -327,8 +326,7 @@ static void e1000_irq_enable(struct e1000_adapter *adapter)
 	struct e1000_hw *hw = &adapter->hw;
 
 	ew32(IMS, IMS_ENABLE_MASK);
-	if (!adapter->paravirtual)
-		E1000_WRITE_FLUSH();
+	E1000_WRITE_FLUSH();
 }
 
 static void e1000_update_mng_vlan(struct e1000_adapter *adapter)
@@ -526,6 +524,7 @@ void e1000_down(struct e1000_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 	u32 rctl, tctl;
 
+
 	/* disable receives in the hardware */
 	rctl = er32(RCTL);
 	ew32(RCTL, rctl & ~E1000_RCTL_EN);
@@ -537,7 +536,7 @@ void e1000_down(struct e1000_adapter *adapter)
 
 	netif_tx_disable(netdev);
 
-	if (adapter->paravirtual) {
+	if (adapter->csb) {
 		/* CSB deallocation protocol. */
 		ew32(CSBBAH, 0);
 		ew32(CSBBAL, 0);
@@ -1237,12 +1236,6 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		}
 	}
 
-	/* Probe for paravirtual device extension. */
-	adapter->paravirtual = (pdev->subsystem_device == E1000_PARAVIRT_SUBDEV);
-	if (adapter->paravirtual) {
-		printk("[e1000] Device supports paravirtualization\n");
-	}
-
 	/* reset the hardware with the new settings */
 	e1000_reset(adapter);
 
@@ -1426,8 +1419,9 @@ static int e1000_open(struct net_device *netdev)
 	if (err)
 		goto err_setup_rx;
 
-	adapter->csb = NULL;
-	if (adapter->paravirtual) {
+	/* Probe for paravirtual device extension. */
+	if (adapter->pdev->subsystem_device == E1000_PARAVIRT_SUBDEV) {
+		printk("[e1000] Device supports paravirtualization\n");
 		/* Allocate the CSB.*/
 		adapter->csb = kmalloc(PARAVIRT_CSB_SIZE, GFP_KERNEL);
 		if (!adapter->csb) {
@@ -1451,10 +1445,14 @@ static int e1000_open(struct net_device *netdev)
 		adapter->csb->host_txcycles_lim = 1;
 		adapter->csb->host_txcycles = 0;
 		adapter->csb_phyaddr = virt_to_phys(adapter->csb);
+		adapter->csb_mode = adapter->csb->guest_csb_on;
 
 		/* Tell the device the CSB physical address. */
 		ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
 		ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
+	} else {
+	    adapter->csb = NULL;
+	    adapter->csb_mode = 0;
 	}
 
 	e1000_power_up_phy(adapter);
@@ -1496,7 +1494,7 @@ static int e1000_open(struct net_device *netdev)
 
 err_req_irq:
 	e1000_power_down_phy(adapter);
-	if (adapter->paravirtual)
+	if (adapter->csb)
 		kfree(adapter->csb);
 err_alloc_csb:
 	e1000_free_all_rx_resources(adapter);
@@ -1529,7 +1527,7 @@ static int e1000_close(struct net_device *netdev)
 	e1000_power_down_phy(adapter);
 	e1000_free_irq(adapter);
 
-	if (adapter->paravirtual)
+	if (adapter->csb)
 		kfree(adapter->csb);
 	e1000_free_all_tx_resources(adapter);
 	e1000_free_all_rx_resources(adapter);
@@ -3108,9 +3106,9 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	wmb();
 
 	tx_ring->next_to_use = i;
-	if (adapter->paravirtual) {
+	if (adapter->csb_mode) {
 		adapter->csb->guest_tdt = i;
-		if (adapter->csb->guest_csb_on && !adapter->csb->host_need_txkick)
+		if (!adapter->csb->host_need_txkick)
 			return;
 	}
 	writel(i, hw->hw_addr + tx_ring->tdt);
@@ -3357,7 +3355,7 @@ static netdev_tx_t e1000_xmit_frame(struct sk_buff *skb,
 		dev_kfree_skb_any(skb);
 		tx_ring->buffer_info[first].time_stamp = 0;
 		tx_ring->next_to_use = first;
-		if (adapter->paravirtual) //XXX
+		if (adapter->csb_mode)
 			adapter->csb->guest_tdt = first;
 	}
 
@@ -3866,13 +3864,13 @@ static irqreturn_t e1000_intr(int irq, void *data)
 	}
 
 	/* disable interrupts, without the synchronize_irq bit */
-	if (!adapter->paravirtual) {
+	if (!adapter->csb_mode) {
 		ew32(IMC, ~0);
 		E1000_WRITE_FLUSH();
 	}
 
 	if (likely(napi_schedule_prep(&adapter->napi))) {
-		if (adapter->paravirtual && adapter->csb->guest_csb_on) {
+		if (adapter->csb_mode) {
 			adapter->csb->guest_need_rxkick = 0;
 			adapter->csb->guest_need_txkick = 0;
 		}
@@ -3915,7 +3913,7 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 		if (likely(adapter->itr_setting & 3))
 			e1000_set_itr(adapter);
 		napi_complete(napi);
-		if (adapter->paravirtual && adapter->csb->guest_csb_on) {
+		if (adapter->csb_mode) {
 			adapter->csb->guest_need_rxkick = 1;
 			adapter->csb->guest_need_txkick = 1;
 			mb();
@@ -4561,9 +4559,9 @@ check_page:
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
 
-		if (adapter->paravirtual) {
+		if (adapter->csb_mode) {
 			adapter->csb->guest_rdt = i;
-			if (adapter->csb->guest_csb_on && !adapter->csb->host_need_rxkick)
+			if (!adapter->csb->host_need_rxkick)
 				return;
 		}
 
@@ -4686,9 +4684,9 @@ map_skb:
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
 
-		if (adapter->paravirtual) {
+		if (adapter->csb_mode) {
 			adapter->csb->guest_rdt = i;
-			if (adapter->csb->guest_csb_on && !adapter->csb->host_need_rxkick)
+			if (!adapter->csb->host_need_rxkick)
 				return;
 		}
 
