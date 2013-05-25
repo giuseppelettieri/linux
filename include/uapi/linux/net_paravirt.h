@@ -50,8 +50,10 @@ struct paravirt_csb {
     uint32_t host_rdh;             /* hw+ gr0 shadow register, mostly unused */
     uint32_t host_need_rxkick;     /* hw- gr+ flush rx queued packets */
     uint32_t host_isr;
+    uint32_t host_need_rxkick_at;
 };
 
-#define PARAVIRT_CSB_SIZE   4096
+#define NET_PARAVIRT_CSB_SIZE   4096
+#define NET_PARAVIRT_NONE	(~((uint32_t)0))
 
 #endif
