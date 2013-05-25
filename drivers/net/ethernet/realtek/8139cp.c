@@ -1231,7 +1231,7 @@ static int cp_open (struct net_device *dev)
 	cp->csb = NULL;
 	if (cp->paravirtual) {
 		/* Allocate the CSB.*/
-		cp->csb = kmalloc(PARAVIRT_CSB_SIZE, GFP_KERNEL);
+		cp->csb = kmalloc(NET_PARAVIRT_CSB_SIZE, GFP_KERNEL);
 		if (!cp->csb) {
 			printk("Communication Status Block allocation failed!");
 			goto err_alloc_csb;
