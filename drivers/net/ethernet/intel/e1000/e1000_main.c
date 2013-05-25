@@ -3870,6 +3870,7 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 						     napi);
 	int tx_clean_complete = 0, work_done = 0;
 	struct e1000_tx_desc * txd = NULL;
+	struct e1000_rx_desc * rxd = NULL;
 
 	tx_clean_complete = e1000_clean_tx_irq(adapter, &adapter->tx_ring[0]);
 
@@ -3884,13 +3885,17 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 			e1000_set_itr(adapter);
 		napi_complete(napi);
 		if (adapter->csb_mode) {
+			/* Enable host TX/RX interrupts. */
 			adapter->csb->guest_need_rxkick = 1;
 			adapter->csb->guest_need_txkick = 1;
 			mb();
+			/* Doublecheck for more work to avoid race conditions. */
 			txd = E1000_TX_DESC(adapter->tx_ring[0],
 						adapter->tx_ring->next_to_clean);
-			if (adapter->csb->host_rdh != adapter->rx_ring->next_to_clean ||
-				(txd->upper.data & cpu_to_le32(E1000_TXD_STAT_DD))) {
+			rxd = E1000_RX_DESC(adapter->rx_ring[0],
+						adapter->rx_ring->next_to_clean);
+			if ((rxd->status & cpu_to_le32(E1000_RXD_STAT_DD)) ||
+			    (txd->upper.data & cpu_to_le32(E1000_TXD_STAT_DD))) {
 				if (likely(napi_schedule_prep(&adapter->napi))) {
 					adapter->csb->guest_need_rxkick = 0;
 					adapter->csb->guest_need_txkick = 0;
