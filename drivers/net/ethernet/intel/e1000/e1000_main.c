@@ -1423,7 +1423,7 @@ static int e1000_open(struct net_device *netdev)
 	if (adapter->pdev->subsystem_device == E1000_PARAVIRT_SUBDEV) {
 		printk("[e1000] Device supports paravirtualization\n");
 		/* Allocate the CSB.*/
-		adapter->csb = kmalloc(PARAVIRT_CSB_SIZE, GFP_KERNEL);
+		adapter->csb = kmalloc(NET_PARAVIRT_CSB_SIZE, GFP_KERNEL);
 		if (!adapter->csb) {
 			printk("Communication Status Block allocation failed!");
 			goto err_alloc_csb;
@@ -1439,8 +1439,9 @@ static int e1000_open(struct net_device *netdev)
 		adapter->csb->guest_csb_on = paravirtual ? 1 : 0;
 		adapter->csb->host_need_txkick = 1;
 		adapter->csb->host_need_rxkick = 1;
+		adapter->csb->host_need_rxkick_at = NET_PARAVIRT_NONE;
 		adapter->csb->guest_need_txkick = 1;
-		adapter->csb->guest_need_txkick_at = ~0;
+		adapter->csb->guest_need_txkick_at = NET_PARAVIRT_NONE;
 		adapter->csb->guest_need_rxkick = 1;
 		adapter->csb->host_txcycles_lim = 1;
 		adapter->csb->host_txcycles = 0;
@@ -4554,6 +4555,13 @@ check_page:
 		rx_desc = E1000_RX_DESC(*rx_ring, i);
 		rx_desc->buffer_addr = cpu_to_le64(buffer_info->dma);
 
+		if (adapter->csb_mode) {
+			adapter->csb->guest_rdt = i;
+			mb();
+			if (i == adapter->csb->host_need_rxkick_at)
+				writel(i, adapter->hw.hw_addr + rx_ring->rdt);
+
+		}
 		if (unlikely(++i == rx_ring->count))
 			i = 0;
 		buffer_info = &rx_ring->buffer_info[i];
@@ -4561,14 +4569,10 @@ check_page:
 
 	if (likely(rx_ring->next_to_use != i)) {
 		rx_ring->next_to_use = i;
+		if (adapter->csb_mode)
+			return;
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
-
-		if (adapter->csb_mode) {
-			adapter->csb->guest_rdt = i;
-			if (!adapter->csb->host_need_rxkick)
-				return;
-		}
 
 		/* Force memory writes to complete before letting h/w
 		 * know there are new descriptors to fetch.  (Only
@@ -4679,6 +4683,13 @@ map_skb:
 		rx_desc = E1000_RX_DESC(*rx_ring, i);
 		rx_desc->buffer_addr = cpu_to_le64(buffer_info->dma);
 
+		if (adapter->csb_mode) {
+			adapter->csb->guest_rdt = i;
+			mb();
+			if (i == adapter->csb->host_need_rxkick_at)
+				writel(i, adapter->hw.hw_addr + rx_ring->rdt);
+
+		}
 		if (unlikely(++i == rx_ring->count))
 			i = 0;
 		buffer_info = &rx_ring->buffer_info[i];
@@ -4686,14 +4697,10 @@ map_skb:
 
 	if (likely(rx_ring->next_to_use != i)) {
 		rx_ring->next_to_use = i;
+		if (adapter->csb_mode)
+			return;
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
-
-		if (adapter->csb_mode) {
-			adapter->csb->guest_rdt = i;
-			if (!adapter->csb->host_need_rxkick)
-				return;
-		}
 
 		/* Force memory writes to complete before letting h/w
 		 * know there are new descriptors to fetch.  (Only
