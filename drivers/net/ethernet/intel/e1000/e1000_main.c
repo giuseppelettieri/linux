@@ -1428,7 +1428,7 @@ static int e1000_open(struct net_device *netdev)
 		adapter->csb->host_need_txkick = 1;
 		adapter->csb->host_need_rxkick = 1;
 		adapter->csb->host_rxkick_at = NET_PARAVIRT_NONE;
-		adapter->csb->guest_need_txkick = 1;
+		adapter->csb->guest_need_txkick = 0;
 		adapter->csb->guest_txkick_at = NET_PARAVIRT_NONE;
 		adapter->csb->guest_need_rxkick = 1;
 		adapter->csb->host_txcycles_lim = 1;
@@ -3086,6 +3086,7 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 	tx_ring->next_to_use = i;
 	if (adapter->csb_mode) {
 		adapter->csb->guest_tdt = i;
+		/* No txkicks if the host doesn't want one. */
 		if (!adapter->csb->host_need_txkick)
 			return;
 	}
@@ -3139,17 +3140,28 @@ static int __e1000_maybe_stop_tx(struct net_device *netdev, int size)
 	struct e1000_tx_ring *tx_ring = adapter->tx_ring;
 
 	netif_stop_queue(netdev);
+	if (adapter->csb_mode)
+		adapter->csb->guest_need_txkick = 1;
 	/* Herbert's original patch had:
 	 *  smp_mb__after_netif_stop_queue();
 	 * but since that doesn't exist yet, just open code it.
 	 */
 	smp_mb();
 
-	/* We need to check again in a case another CPU has just
+	if (adapter->csb_mode)
+		/* Doublecheck for more TX cleaning work, in order to
+		 * avoid races with the host. */
+		e1000_clean_tx_irq(adapter, tx_ring);
+
+	/* We need to check again in a case another CPU (or the last 
+	 * e1000_clean_tx_irq() call when in CSB mode) has just
 	 * made room available.
 	 */
 	if (likely(E1000_DESC_UNUSED(tx_ring) < size))
 		return -EBUSY;
+
+	if (adapter->csb_mode)
+		adapter->csb->guest_need_txkick = 0;
 
 	/* A reprieve! */
 	netif_start_queue(netdev);
@@ -3188,6 +3200,10 @@ static netdev_tx_t e1000_xmit_frame(struct sk_buff *skb,
 	 * single qdisc implementation, we can look at this again.
 	 */
 	tx_ring = adapter->tx_ring;
+	if (adapter->csb_mode)
+		/* Clean up used TX descriptors before transmitting new ones.
+		 * In CSB mode this is not done by the NAPI thread. */
+		e1000_clean_tx_irq(adapter, tx_ring);
 
 	/* On PCI/PCI-X HW, if packet size is less than ETH_ZLEN,
 	 * packets may get corrupted during padding by HW.
@@ -3317,7 +3333,11 @@ static netdev_tx_t e1000_xmit_frame(struct sk_buff *skb,
 			     nr_frags, mss);
 
 	if (count) {
-		netdev_sent_queue(netdev, skb->len);
+		if (adapter->csb_mode)
+			/* Don't wait for the TX completion. */
+			skb_orphan(skb);
+		else
+			netdev_sent_queue(netdev, skb->len);
 		skb_tx_timestamp(skb);
 
 		e1000_tx_queue(adapter, tx_ring, tx_flags, count);
@@ -3834,17 +3854,21 @@ static irqreturn_t e1000_intr(int irq, void *data)
 			schedule_delayed_work(&adapter->watchdog_task, 1);
 	}
 
-	/* disable interrupts, without the synchronize_irq bit */
+	if (adapter->csb_mode && icr & (E1000_ICR_TXDW | E1000_ICR_TXQE)) {
+	    /* Wakes the TX queue so that the start_xmit() method can
+	       clean used TX descriptors and continue transmitting. */
+	    adapter->csb->guest_need_txkick = 0;
+	    netif_wake_queue(netdev);
+	} 
 	if (!adapter->csb_mode) {
+		/* disable interrupts, without the synchronize_irq bit */
 		ew32(IMC, ~0);
 		E1000_WRITE_FLUSH();
 	}
 
 	if (likely(napi_schedule_prep(&adapter->napi))) {
-		if (adapter->csb_mode) {
+		if (adapter->csb_mode)
 			adapter->csb->guest_need_rxkick = 0;
-			adapter->csb->guest_need_txkick = 0;
-		}
 		adapter->total_tx_bytes = 0;
 		adapter->total_tx_packets = 0;
 		adapter->total_rx_bytes = 0;
@@ -3870,14 +3894,14 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 	struct e1000_adapter *adapter = container_of(napi, struct e1000_adapter,
 						     napi);
 	int tx_clean_complete = 0, work_done = 0;
-	struct e1000_tx_desc * txd = NULL;
 	struct e1000_rx_desc * rxd = NULL;
 
-	tx_clean_complete = e1000_clean_tx_irq(adapter, &adapter->tx_ring[0]);
+	if (!adapter->csb_mode)
+		tx_clean_complete = e1000_clean_tx_irq(adapter, &adapter->tx_ring[0]);
 
 	adapter->clean_rx(adapter, &adapter->rx_ring[0], &work_done, budget);
-
-	if (!tx_clean_complete)
+	
+	if (!adapter->csb_mode && !tx_clean_complete)
 		work_done = budget;
 
 	/* If budget not fully consumed, exit the polling mode */
@@ -3888,21 +3912,16 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 		if (adapter->csb_mode) {
 			/* Enable host TX/RX interrupts. */
 			adapter->csb->guest_need_rxkick = 1;
-			adapter->csb->guest_need_txkick = 1;
 			mb();
-			/* Doublecheck for more work to avoid race conditions. */
-			txd = E1000_TX_DESC(adapter->tx_ring[0],
-						adapter->tx_ring->next_to_clean);
+			/* Doublecheck for more work to avoid races with the
+			 * host. TODO don't use ntc, but a snapshot! */
 			rxd = E1000_RX_DESC(adapter->rx_ring[0],
 						adapter->rx_ring->next_to_clean);
-			if ((rxd->status & cpu_to_le32(E1000_RXD_STAT_DD)) ||
-			    (txd->upper.data & cpu_to_le32(E1000_TXD_STAT_DD))) {
+			if (rxd->status & cpu_to_le32(E1000_RXD_STAT_DD))
 				if (likely(napi_schedule_prep(&adapter->napi))) {
 					adapter->csb->guest_need_rxkick = 0;
-					adapter->csb->guest_need_txkick = 0;
 					__napi_schedule(&adapter->napi);
 				}
-			}
 		} else {
 			if (!test_bit(__E1000_DOWN, &adapter->flags)) 
 				e1000_irq_enable(adapter);
@@ -3967,20 +3986,22 @@ static bool e1000_clean_tx_irq(struct e1000_adapter *adapter,
 
 	tx_ring->next_to_clean = i;
 
-	netdev_completed_queue(netdev, pkts_compl, bytes_compl);
+	if (!adapter->csb_mode) {
+		netdev_completed_queue(netdev, pkts_compl, bytes_compl);
 
 #define TX_WAKE_THRESHOLD 32
-	if (unlikely(count && netif_carrier_ok(netdev) &&
-		     E1000_DESC_UNUSED(tx_ring) >= TX_WAKE_THRESHOLD)) {
-		/* Make sure that anybody stopping the queue after this
-		 * sees the new next_to_clean.
-		 */
-		smp_mb();
+		if (unlikely(count && netif_carrier_ok(netdev) &&
+				E1000_DESC_UNUSED(tx_ring) >= TX_WAKE_THRESHOLD)) {
+			/* Make sure that anybody stopping the queue after this
+			 * sees the new next_to_clean.
+			 */
+			smp_mb();
 
-		if (netif_queue_stopped(netdev) &&
-		    !(test_bit(__E1000_DOWN, &adapter->flags))) {
-			netif_wake_queue(netdev);
-			++adapter->restart_queue;
+			if (netif_queue_stopped(netdev) &&
+					!(test_bit(__E1000_DOWN, &adapter->flags))) {
+				netif_wake_queue(netdev);
+				++adapter->restart_queue;
+			}
 		}
 	}
 
@@ -4017,6 +4038,8 @@ static bool e1000_clean_tx_irq(struct e1000_adapter *adapter,
 				eop_desc->upper.fields.status);
 			e1000_dump(adapter);
 			netif_stop_queue(netdev);
+			if (adapter->csb_mode)
+				adapter->csb->guest_need_txkick = 1;
 		}
 	}
 	adapter->total_tx_bytes += total_tx_bytes;
@@ -4527,6 +4550,7 @@ check_page:
 		if (adapter->csb_mode) {
 			adapter->csb->guest_rdt = i;
 			mb();
+			/* Do a rxkick if the host asked for that. */
 			if (i == adapter->csb->host_rxkick_at)
 				writel(i, adapter->hw.hw_addr + rx_ring->rdt);
 
@@ -4539,6 +4563,7 @@ check_page:
 	if (likely(rx_ring->next_to_use != i)) {
 		rx_ring->next_to_use = i;
 		if (adapter->csb_mode)
+			/* We don't need an rxkick here, in CSB mode. */
 			return;
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
@@ -4655,6 +4680,7 @@ map_skb:
 		if (adapter->csb_mode) {
 			adapter->csb->guest_rdt = i;
 			mb();
+			/* Do a rxkick if the host asked for that. */
 			if (i == adapter->csb->host_rxkick_at)
 				writel(i, adapter->hw.hw_addr + rx_ring->rdt);
 
@@ -4667,6 +4693,7 @@ map_skb:
 	if (likely(rx_ring->next_to_use != i)) {
 		rx_ring->next_to_use = i;
 		if (adapter->csb_mode)
+			/* We don't need an rxkick here, in CSB mode. */
 			return;
 		if (unlikely(i-- == 0))
 			i = (rx_ring->count - 1);
