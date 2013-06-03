@@ -1953,6 +1953,8 @@ static void e1000_configure_rx(struct e1000_adapter *adapter)
 		ew32(RADV, adapter->rx_abs_int_delay);
 		if (adapter->itr_setting != 0)
 			ew32(ITR, 1000000000 / (adapter->itr * 256));
+		else
+			ew32(ITR, 0);
 	}
 
 	/* Setup the HW Rx Head and Tail Descriptor Pointers and
@@ -3153,7 +3155,7 @@ static int __e1000_maybe_stop_tx(struct net_device *netdev, int size)
 		 * avoid races with the host. */
 		e1000_clean_tx_irq(adapter, tx_ring);
 
-	/* We need to check again in a case another CPU (or the last 
+	/* We need to check again in a case another CPU (or the last
 	 * e1000_clean_tx_irq() call when in CSB mode) has just
 	 * made room available.
 	 */
@@ -3859,7 +3861,7 @@ static irqreturn_t e1000_intr(int irq, void *data)
 	       clean used TX descriptors and continue transmitting. */
 	    adapter->csb->guest_need_txkick = 0;
 	    netif_wake_queue(netdev);
-	} 
+	}
 	if (!adapter->csb_mode) {
 		/* disable interrupts, without the synchronize_irq bit */
 		ew32(IMC, ~0);
@@ -3923,7 +3925,7 @@ static int e1000_clean(struct napi_struct *napi, int budget)
 					__napi_schedule(&adapter->napi);
 				}
 		} else {
-			if (!test_bit(__E1000_DOWN, &adapter->flags)) 
+			if (!test_bit(__E1000_DOWN, &adapter->flags))
 				e1000_irq_enable(adapter);
 		}
 		
