@@ -417,12 +417,59 @@ static void e1000_configure(struct e1000_adapter *adapter)
 	}
 }
 
+int e1000_configure_csb(struct e1000_adapter * adapter)
+{
+	struct e1000_hw *hw = &adapter->hw;
+
+	/* Probe for paravirtual device extension. */
+	if (adapter->pdev->subsystem_device == E1000_PARAVIRT_SUBDEV) {
+		printk("[e1000] Device supports paravirtualization\n");
+		/* Allocate the CSB.*/
+		adapter->csb = kmalloc(NET_PARAVIRT_CSB_SIZE, GFP_KERNEL);
+		if (!adapter->csb) {
+			printk("Communication Status Block allocation failed!");
+			return -1;
+		}
+		/* The first four values must match the register initial
+		   values set by e1000_configure_rx() and
+		   e1000_configure_tx(). */
+		adapter->csb->guest_tdt = er32(TDT);
+		adapter->csb->guest_rdt = er32(RDT);
+		adapter->csb->host_tdh = er32(TDH);
+		adapter->csb->host_rdh = er32(RDH);
+
+		adapter->csb->guest_csb_on = paravirtual ? 1 : 0;
+		adapter->csb->host_need_txkick = 1;
+		adapter->csb->host_need_rxkick = 1;
+		adapter->csb->host_rxkick_at = NET_PARAVIRT_NONE;
+		adapter->csb->guest_need_txkick = 0;
+		adapter->csb->guest_txkick_at = NET_PARAVIRT_NONE;
+		adapter->csb->guest_need_rxkick = 1;
+		adapter->csb->host_txcycles_lim = 1;
+		adapter->csb->host_txcycles = 0;
+		adapter->csb_phyaddr = virt_to_phys(adapter->csb);
+		adapter->csb_mode = adapter->csb->guest_csb_on;
+
+		/* Tell the device the CSB physical address. */
+		ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
+		ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
+	} else {
+	    adapter->csb = NULL;
+	    adapter->csb_mode = 0;
+	}
+
+	return 0;
+}
+
 int e1000_up(struct e1000_adapter *adapter)
 {
 	struct e1000_hw *hw = &adapter->hw;
 
 	/* hardware has been reset, we need to reload some things */
 	e1000_configure(adapter);
+
+	if (e1000_configure_csb(adapter) < 0)
+	    return -1;
 
 	clear_bit(__E1000_DOWN, &adapter->flags);
 
@@ -547,6 +594,7 @@ void e1000_down(struct e1000_adapter *adapter)
 		/* CSB deallocation protocol. */
 		ew32(CSBBAH, 0);
 		ew32(CSBBAL, 0);
+		adapter->csb_mode = 0;
 	}
 
 	/* disable transmits in the hardware */
@@ -1407,43 +1455,6 @@ static int e1000_open(struct net_device *netdev)
 	if (err)
 		goto err_setup_rx;
 
-	/* Probe for paravirtual device extension. */
-	if (adapter->pdev->subsystem_device == E1000_PARAVIRT_SUBDEV) {
-		printk("[e1000] Device supports paravirtualization\n");
-		/* Allocate the CSB.*/
-		adapter->csb = kmalloc(NET_PARAVIRT_CSB_SIZE, GFP_KERNEL);
-		if (!adapter->csb) {
-			printk("Communication Status Block allocation failed!");
-			goto err_alloc_csb;
-		}
-		/* The first four values must match the register initial
-		   values set by e1000_configure_rx() and
-		   e1000_configure_tx(). */
-		adapter->csb->guest_tdt = 0;
-		adapter->csb->guest_rdt = 0;
-		adapter->csb->host_tdh = 0;
-		adapter->csb->host_rdh = 0;
-
-		adapter->csb->guest_csb_on = paravirtual ? 1 : 0;
-		adapter->csb->host_need_txkick = 1;
-		adapter->csb->host_need_rxkick = 1;
-		adapter->csb->host_rxkick_at = NET_PARAVIRT_NONE;
-		adapter->csb->guest_need_txkick = 0;
-		adapter->csb->guest_txkick_at = NET_PARAVIRT_NONE;
-		adapter->csb->guest_need_rxkick = 1;
-		adapter->csb->host_txcycles_lim = 1;
-		adapter->csb->host_txcycles = 0;
-		adapter->csb_phyaddr = virt_to_phys(adapter->csb);
-		adapter->csb_mode = adapter->csb->guest_csb_on;
-
-		/* Tell the device the CSB physical address. */
-		ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
-		ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
-	} else {
-	    adapter->csb = NULL;
-	    adapter->csb_mode = 0;
-	}
-
 	e1000_power_up_phy(adapter);
 
 	adapter->mng_vlan_id = E1000_MNG_VLAN_NONE;
@@ -1458,6 +1469,9 @@ static int e1000_open(struct net_device *netdev)
 	 * clean_rx handler before we do so.
 	 */
 	e1000_configure(adapter);
+
+	if (e1000_configure_csb(adapter) < 0)
+	    goto err_alloc_csb;
 
 	err = e1000_request_irq(adapter);
 	if (err)
