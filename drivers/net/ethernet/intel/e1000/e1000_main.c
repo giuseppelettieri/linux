@@ -3623,9 +3623,10 @@ static int e1000_change_mtu(struct net_device *netdev, int new_mtu)
 	struct e1000_adapter *adapter = netdev_priv(netdev);
 	struct e1000_hw *hw = &adapter->hw;
 	int max_frame = new_mtu + ENET_HEADER_SIZE + ETHERNET_FCS_SIZE;
+	int max_jumbo_frame_size = (adapter->pdev->subsystem_device == E1000_PARAVIRT_SUBDEV) ? 65536 : MAX_JUMBO_FRAME_SIZE;
 
 	if ((max_frame < MINIMUM_ETHERNET_FRAME_SIZE) ||
-	    (max_frame > MAX_JUMBO_FRAME_SIZE)) {
+	    (max_frame > max_jumbo_frame_size)) {
 		e_err(probe, "Invalid MTU setting\n");
 		return -EINVAL;
 	}
