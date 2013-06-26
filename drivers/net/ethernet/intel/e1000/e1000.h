@@ -198,6 +198,13 @@ struct e1000_rx_ring {
 	struct e1000_buffer *buffer_info;
 	struct sk_buff *rx_skb_top;
 
+	/* pointer to the vnet-header ring memory */
+	void * vnet_hdr;
+	/* length of vnet header-ring in bytes */
+	unsigned int vnet_size;
+	/* physical address of the vnet-header ring */
+	dma_addr_t vnet_dma;
+
 	/* cpu for rx queue */
 	int cpu;
 
