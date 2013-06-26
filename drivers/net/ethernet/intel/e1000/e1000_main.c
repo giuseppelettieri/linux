@@ -32,6 +32,7 @@
 #include <linux/prefetch.h>
 #include <linux/bitops.h>
 #include <linux/if_vlan.h>
+#include <linux/virtio_net.h>
 
 char e1000_driver_name[] = "e1000";
 static char e1000_driver_string[] = "Intel(R) PRO/1000 Network Driver";
@@ -447,6 +448,8 @@ int e1000_configure_csb(struct e1000_adapter * adapter)
 		adapter->csb->guest_need_rxkick = 1;
 		adapter->csb->host_txcycles_lim = 1;
 		adapter->csb->host_txcycles = 0;
+		adapter->csb->vnet_ring_high = (adapter->rx_ring->vnet_dma >> 32);
+		adapter->csb->vnet_ring_low = (adapter->rx_ring->vnet_dma & 0x00000000ffffffffULL);
 		adapter->csb_phyaddr = virt_to_phys(adapter->csb);
 		adapter->csb_mode = adapter->csb->guest_csb_on;
 
@@ -1837,6 +1840,20 @@ setup_rx_desc_die:
 	rxdr->next_to_use = 0;
 	rxdr->rx_skb_top = NULL;
 
+	/* Allocate a parallel ring for vnet_header. */
+	rxdr->vnet_size = rxdr->count * sizeof(struct virtio_net_hdr);
+	rxdr->vnet_size = ALIGN(rxdr->vnet_size, 4096);
+	rxdr->vnet_hdr = dma_alloc_coherent(&pdev->dev, rxdr->vnet_size, &rxdr->vnet_dma,
+					GFP_KERNEL);
+	if (!rxdr->vnet_hdr) {
+		e_err(probe, "Unable to allocate memory for the vnet_hdr ring\n");
+		vfree(rxdr->buffer_info);
+		dma_free_coherent(&pdev->dev, rxdr->size, rxdr->desc,
+			  rxdr->dma);
+		return -ENOMEM;
+	}
+	memset(rxdr->vnet_hdr, 0, rxdr->vnet_size);
+
 	return 0;
 }
 
@@ -2132,6 +2149,10 @@ static void e1000_free_rx_resources(struct e1000_adapter *adapter,
 			  rx_ring->dma);
 
 	rx_ring->desc = NULL;
+
+	/* Deallocate vnet_hdr ring. */
+	dma_free_coherent(&pdev->dev, rx_ring->vnet_size, rx_ring->vnet_hdr,
+			  rx_ring->vnet_dma);
 }
 
 /**
