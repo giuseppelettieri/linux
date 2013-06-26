@@ -73,6 +73,8 @@ struct paravirt_csb {
     uint32_t host_need_rxkick;     /* HW- GR+ flush rx queued packets */
     uint32_t host_isr;
     uint32_t host_rxkick_at;  /* Ring index where host expects an rxkick. */
+    uint32_t vnet_ring_high;	/* Vnet ring physical address high. */
+    uint32_t vnet_ring_low;	/* Vnet ring physical address low. */
 };
 
 #define NET_PARAVIRT_CSB_SIZE   4096
