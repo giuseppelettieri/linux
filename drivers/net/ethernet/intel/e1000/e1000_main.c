@@ -453,6 +453,11 @@ int e1000_configure_csb(struct e1000_adapter * adapter)
 		adapter->csb_phyaddr = virt_to_phys(adapter->csb);
 		adapter->csb_mode = adapter->csb->guest_csb_on;
 
+		/* We change the rx buffer size so that we are able to receive a maximum
+		   sized GSO packet. */
+		adapter->rx_buffer_len = PAGE_SIZE;
+		e1000_setup_rctl(adapter);
+
 		/* Tell the device the CSB physical address. */
 		ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
 		ew32(CSBBAL, (adapter->csb_phyaddr & 0x00000000ffffffffULL));
@@ -4246,6 +4251,7 @@ static bool e1000_clean_jumbo_rx_irq(struct e1000_adapter *adapter,
 	bool cleaned = false;
 	unsigned int total_rx_bytes=0, total_rx_packets=0;
 	struct virtio_net_hdr * hdr = NULL;
+	unsigned int frags_used = 0;
 
 	i = rx_ring->next_to_clean;
 	rx_desc = E1000_RX_DESC(*rx_ring, i);
@@ -4267,6 +4273,7 @@ static bool e1000_clean_jumbo_rx_irq(struct e1000_adapter *adapter,
 		if (!hdr) {
 			hdr = (struct virtio_net_hdr *)rx_ring->vnet_hdr;
 			hdr += i;
+			frags_used = 0;
 		}
 
 		if (++i == rx_ring->count) i = 0;
@@ -4311,8 +4318,24 @@ static bool e1000_clean_jumbo_rx_irq(struct e1000_adapter *adapter,
 				if (rx_ring->rx_skb_top)
 					dev_kfree_skb(rx_ring->rx_skb_top);
 				rx_ring->rx_skb_top = NULL;
+				hdr = NULL;
 				goto next_desc;
 			}
+		}
+
+		frags_used++;
+		/* Drop the frame if it is too big to fit into a pskb. This
+		   should never happen for a properly working (emulated)
+		   device. */
+		if (unlikely(frags_used > MAX_SKB_FRAGS)) {
+			printk("Receive packet requires more than MAX_SKB_FRAGS(=%d) frags\n", (int)MAX_SKB_FRAGS);
+			/* recycle both page and skb */
+			buffer_info->skb = skb;
+			if (rx_ring->rx_skb_top)
+				dev_kfree_skb(rx_ring->rx_skb_top);
+			rx_ring->rx_skb_top = NULL;
+			hdr = NULL;
+			goto next_desc;
 		}
 
 #define rxtop rx_ring->rx_skb_top
