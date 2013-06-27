@@ -1961,7 +1961,7 @@ static void e1000_configure_rx(struct e1000_adapter *adapter)
 	struct e1000_hw *hw = &adapter->hw;
 	u32 rdlen, rctl, rxcsum;
 
-	if (adapter->netdev->mtu > ETH_DATA_LEN) {
+	if (adapter->netdev->mtu > 0 /* ETH_DATA_LEN */) { /* force jumbo */
 		rdlen = adapter->rx_ring[0].count *
 		        sizeof(struct e1000_rx_desc);
 		adapter->clean_rx = e1000_clean_jumbo_rx_irq;
@@ -2810,7 +2810,8 @@ static int e1000_tso(struct e1000_adapter *adapter,
 		mss = skb_shinfo(skb)->gso_size;
 		if (skb->protocol == htons(ETH_P_IP)) {
 			struct iphdr *iph = ip_hdr(skb);
-			iph->tot_len = 0;
+			if (!adapter->csb_mode)
+			    iph->tot_len = 0;
 			iph->check = 0;
 			tcp_hdr(skb)->check = ~csum_tcpudp_magic(iph->saddr,
 								 iph->daddr, 0,
@@ -4145,8 +4146,33 @@ static void e1000_consume_page(struct e1000_buffer *bi, struct sk_buff *skb,
  * @skb: pointer to sk_buff to be indicated to stack
  */
 static void e1000_receive_skb(struct e1000_adapter *adapter, u8 status,
-			      __le16 vlan, struct sk_buff *skb)
+			      __le16 vlan, struct sk_buff *skb,
+			    struct virtio_net_hdr * hdr)
 {
+#if 1
+	if (hdr == NULL) {
+		printk("[e1000] null-pointer error: hdr == NULL!!");
+		return;
+	}
+#endif
+#if 0
+	printk("flags=%02x,gso_type=%02x,hdr_len=%04x,gso_size=%04x,css=%04x,cso=%04x\n",hdr->flags,hdr->gso_type,hdr->hdr_len,hdr->gso_size,hdr->csum_start,hdr->csum_offset);
+#endif
+
+	if (hdr->flags & VIRTIO_NET_HDR_F_NEEDS_CSUM) {
+#if 1
+		/* TODO make the #else work. */
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+#else
+		if (!skb_partial_csum_set(skb, hdr->csum_start, hdr->csum_offset)) {
+			printk("ERR1\n");
+			goto frame_err;
+		}
+#endif
+	} else if (hdr->flags & VIRTIO_NET_HDR_F_DATA_VALID) {
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+	}
+
 	skb->protocol = eth_type_trans(skb, adapter->netdev);
 
 	if (status & E1000_RXD_STAT_VP) {
@@ -4154,7 +4180,44 @@ static void e1000_receive_skb(struct e1000_adapter *adapter, u8 status,
 
 		__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), vid);
 	}
+
+	if (hdr->gso_type != VIRTIO_NET_HDR_GSO_NONE) {
+		switch (hdr->gso_type & ~VIRTIO_NET_HDR_GSO_ECN) {
+		case VIRTIO_NET_HDR_GSO_TCPV4:
+			skb_shinfo(skb)->gso_type = SKB_GSO_TCPV4;
+			break;
+		case VIRTIO_NET_HDR_GSO_UDP:
+			skb_shinfo(skb)->gso_type = SKB_GSO_UDP;
+			break;
+		case VIRTIO_NET_HDR_GSO_TCPV6:
+			skb_shinfo(skb)->gso_type = SKB_GSO_TCPV6;
+			break;
+		default:
+			printk("ERR2\n");
+			goto frame_err;
+		}
+
+		if (hdr->gso_type & VIRTIO_NET_HDR_GSO_ECN)
+			skb_shinfo(skb)->gso_type |= SKB_GSO_TCP_ECN;
+
+		skb_shinfo(skb)->gso_size = hdr->gso_size;
+		if (skb_shinfo(skb)->gso_size == 0) {
+			printk("ERR3\n");
+			goto frame_err;
+		}
+
+		/* Header must be checked, and gso_segs computed. */
+		skb_shinfo(skb)->gso_type |= SKB_GSO_DODGY;
+		skb_shinfo(skb)->gso_segs = 0;
+
+		netif_receive_skb(skb);
+		return;
+	}
+
 	napi_gro_receive(&adapter->napi, skb);
+
+frame_err:
+	return;
 }
 
 /**
@@ -4182,6 +4245,7 @@ static bool e1000_clean_jumbo_rx_irq(struct e1000_adapter *adapter,
 	int cleaned_count = 0;
 	bool cleaned = false;
 	unsigned int total_rx_bytes=0, total_rx_packets=0;
+	struct virtio_net_hdr * hdr = NULL;
 
 	i = rx_ring->next_to_clean;
 	rx_desc = E1000_RX_DESC(*rx_ring, i);
@@ -4199,6 +4263,11 @@ static bool e1000_clean_jumbo_rx_irq(struct e1000_adapter *adapter,
 		status = rx_desc->status;
 		skb = buffer_info->skb;
 		buffer_info->skb = NULL;
+
+		if (!hdr) {
+			hdr = (struct virtio_net_hdr *)rx_ring->vnet_hdr;
+			hdr += i;
+		}
 
 		if (++i == rx_ring->count) i = 0;
 		next_rxd = E1000_RX_DESC(*rx_ring, i);
@@ -4321,7 +4390,8 @@ process_skb:
 			goto next_desc;
 		}
 
-		e1000_receive_skb(adapter, status, rx_desc->special, skb);
+		e1000_receive_skb(adapter, status, rx_desc->special, skb, hdr);
+		hdr = NULL;
 
 next_desc:
 		rx_desc->status = 0;
@@ -4395,6 +4465,7 @@ static bool e1000_clean_rx_irq(struct e1000_adapter *adapter,
 	int cleaned_count = 0;
 	bool cleaned = false;
 	unsigned int total_rx_bytes=0, total_rx_packets=0;
+	struct virtio_net_hdr null_hdr = { 0 };
 
 #ifdef DEV_NETMAP
 	ND("calling netmap_rx_irq");
@@ -4491,7 +4562,7 @@ process_skb:
 				  ((u32)(rx_desc->errors) << 24),
 				  le16_to_cpu(rx_desc->csum), skb);
 
-		e1000_receive_skb(adapter, status, rx_desc->special, skb);
+		e1000_receive_skb(adapter, status, rx_desc->special, skb, &null_hdr);
 
 next_desc:
 		rx_desc->status = 0;
