@@ -453,16 +453,18 @@ int e1000_configure_csb(struct e1000_adapter * adapter)
 		adapter->csb_phyaddr = virt_to_phys(adapter->csb);
 		adapter->csb_mode = adapter->csb->guest_csb_on;
 
-		/* We change the rx buffer size so that we are able to receive a maximum
-		   sized GSO packet. */
-		adapter->rx_buffer_len = PAGE_SIZE;
-		e1000_setup_rctl(adapter);
+		if (adapter->csb_mode) {
+			/* We change the rx buffer size so that we are able to receive a maximum
+			   sized GSO packet. */
+			adapter->rx_buffer_len = PAGE_SIZE;
+			e1000_setup_rctl(adapter);
 
-		/* Force the driver to use jumbo buffers. */
-		e1000_clean_rx_ring(adapter, adapter->rx_ring);
-		adapter->clean_rx = e1000_clean_jumbo_rx_irq;
-		adapter->alloc_rx_buf = e1000_alloc_jumbo_rx_buffers;
-		adapter->alloc_rx_buf(adapter, adapter->rx_ring, E1000_DESC_UNUSED(adapter->rx_ring));
+			/* Force the driver to use jumbo buffers for the same reason. */
+			e1000_clean_rx_ring(adapter, adapter->rx_ring);
+			adapter->clean_rx = e1000_clean_jumbo_rx_irq;
+			adapter->alloc_rx_buf = e1000_alloc_jumbo_rx_buffers;
+			adapter->alloc_rx_buf(adapter, adapter->rx_ring, E1000_DESC_UNUSED(adapter->rx_ring));
+		}
 
 		/* Tell the device the CSB physical address. */
 		ew32(CSBBAH, (adapter->csb_phyaddr >> 32));
