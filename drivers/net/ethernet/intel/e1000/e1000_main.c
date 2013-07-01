@@ -4162,26 +4162,19 @@ static void e1000_receive_skb(struct e1000_adapter *adapter, u8 status,
 			      __le16 vlan, struct sk_buff *skb,
 			    struct virtio_net_hdr * hdr)
 {
-#if 1
+#if 0
 	if (hdr == NULL) {
 		printk("[e1000] null-pointer error: hdr == NULL!!");
 		return;
 	}
-#endif
-#if 0
 	printk("flags=%02x,gso_type=%02x,hdr_len=%04x,gso_size=%04x,css=%04x,cso=%04x\n",hdr->flags,hdr->gso_type,hdr->hdr_len,hdr->gso_size,hdr->csum_start,hdr->csum_offset);
 #endif
 
 	if (hdr->flags & VIRTIO_NET_HDR_F_NEEDS_CSUM) {
-#if 1
-		/* TODO make the #else work. */
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
-#else
 		if (!skb_partial_csum_set(skb, hdr->csum_start, hdr->csum_offset)) {
-			printk("ERR1\n");
+			printk("[e1000] ERR1\n");
 			goto frame_err;
 		}
-#endif
 	} else if (hdr->flags & VIRTIO_NET_HDR_F_DATA_VALID) {
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	}
@@ -4206,7 +4199,7 @@ static void e1000_receive_skb(struct e1000_adapter *adapter, u8 status,
 			skb_shinfo(skb)->gso_type = SKB_GSO_TCPV6;
 			break;
 		default:
-			printk("ERR2\n");
+			printk("[e1000] ERR2\n");
 			goto frame_err;
 		}
 
@@ -4215,16 +4208,13 @@ static void e1000_receive_skb(struct e1000_adapter *adapter, u8 status,
 
 		skb_shinfo(skb)->gso_size = hdr->gso_size;
 		if (skb_shinfo(skb)->gso_size == 0) {
-			printk("ERR3\n");
+			printk("[e1000] ERR3\n");
 			goto frame_err;
 		}
 
 		/* Header must be checked, and gso_segs computed. */
 		skb_shinfo(skb)->gso_type |= SKB_GSO_DODGY;
 		skb_shinfo(skb)->gso_segs = 0;
-
-		netif_receive_skb(skb);
-		return;
 	}
 
 	napi_gro_receive(&adapter->napi, skb);
@@ -4351,10 +4341,20 @@ process_skb:
 		if (!(status & E1000_RXD_STAT_EOP)) {
 			/* this descriptor is only the beginning (or middle) */
 			if (!rxtop) {
+				int copy = length;
+				char *p = page_address(buffer_info->page);
+
+				if (copy > skb_tailroom(skb))
+					copy = skb_tailroom(skb);
+				memcpy(skb_put(skb, copy), p, copy);
+				length -= copy;
 				/* this is the beginning of a chain */
 				rxtop = skb;
-				skb_fill_page_desc(rxtop, 0, buffer_info->page,
-						   0, length);
+				if (length) {
+					skb_fill_page_desc(rxtop, 0, buffer_info->page,
+						   copy, length);
+					e1000_consume_page(buffer_info, rxtop, length);
+				}
 			} else {
 				/* this is the middle of a chain */
 				skb_fill_page_desc(rxtop,
@@ -4362,8 +4362,8 @@ process_skb:
 				    buffer_info->page, 0, length);
 				/* re-use the skb, only consumed the page */
 				buffer_info->skb = skb;
+				e1000_consume_page(buffer_info, rxtop, length);
 			}
-			e1000_consume_page(buffer_info, rxtop, length);
 			goto next_desc;
 		} else {
 			if (rxtop) {
@@ -4382,20 +4382,19 @@ process_skb:
 				/* no chain, got EOP, this buf is the packet
 				 * copybreak to save the put_page/alloc_page
 				 */
-				if (length <= copybreak &&
-				    skb_tailroom(skb) >= length) {
-					u8 *vaddr;
-					vaddr = kmap_atomic(buffer_info->page);
-					memcpy(skb_tail_pointer(skb), vaddr,
-					       length);
-					kunmap_atomic(vaddr);
-					/* re-use the page, so don't erase
-					 * buffer_info->page
-					 */
-					skb_put(skb, length);
-				} else {
+				int copy = length;
+				char *p = page_address(buffer_info->page);
+
+				/* We copy the initial bytes into skb->data. */
+				if (copy > skb_tailroom(skb))
+					copy = skb_tailroom(skb);
+				memcpy(skb_put(skb, copy), p, copy);
+				length -= copy;
+				if (length) {
+					/* Set the remainder as a paged
+					   appendix. */
 					skb_fill_page_desc(skb, 0,
-							   buffer_info->page, 0,
+							   buffer_info->page, copy,
 							   length);
 					e1000_consume_page(buffer_info, skb,
 							   length);
