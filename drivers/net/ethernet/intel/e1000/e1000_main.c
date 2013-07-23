@@ -3887,12 +3887,7 @@ static irqreturn_t e1000_intr(int irq, void *data)
 	struct net_device *netdev = data;
 	struct e1000_adapter *adapter = netdev_priv(netdev);
 	struct e1000_hw *hw = &adapter->hw;
-	u32 icr;
-
-        if (adapter->csb_mode && !adapter->csb->host_need_intr_ack)
-            icr = adapter->csb->host_isr;
-        else
-            icr = er32(ICR);
+	u32 icr = er32(ICR);
 
 	if (unlikely((!icr)))
 		return IRQ_NONE;  /* Not our interrupt */
