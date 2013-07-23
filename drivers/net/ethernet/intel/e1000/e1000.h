@@ -329,6 +329,11 @@ struct e1000_adapter {
 	struct paravirt_csb * csb;	/* Communication Status Block */
 	unsigned long csb_phyaddr;	/* CSB physical address. */
 	unsigned csb_mode;	/* = adapter->csb && adapter->csb_guest_csb_on */
+        /* MSI-X support */
+        struct msix_entry *msix_entries;
+        cpumask_var_t *msix_affinity_masks;
+        int msix_enabled;
+
 };
 
 enum e1000_state_t {
