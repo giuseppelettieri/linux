@@ -61,7 +61,8 @@ struct paravirt_csb {
     uint32_t guest_csb_on;         /* GW- HR+ enable paravirtual mode */
     uint32_t guest_rdt;            /* GW+ HR+ rx buffers available */
     uint32_t guest_txkick_at; /* Ring index where guest expects a txkick. */
-    uint32_t pad[10];
+    uint32_t guest_use_msix;        /* GW0 HR0 guest uses MSI-X interrupts. */
+    uint32_t pad[9];
 
     /* these are (mostly) written by the host */
     uint32_t host_tdh;             /* HW+ GR0 shadow register, mostly unused */
@@ -75,7 +76,6 @@ struct paravirt_csb {
     uint32_t host_rxkick_at;  /* Ring index where host expects an rxkick. */
     uint32_t vnet_ring_high;	/* Vnet ring physical address high. */
     uint32_t vnet_ring_low;	/* Vnet ring physical address low. */
-    uint32_t host_need_intr_ack;    /* GR0 HW0 host needs interrupt acks. */
 };
 
 #define NET_PARAVIRT_CSB_SIZE   4096
