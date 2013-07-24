@@ -379,6 +379,8 @@ static void e1000_irq_disable(struct e1000_adapter *adapter)
 
 	ew32(IMC, ~0);
 	E1000_WRITE_FLUSH();
+        if (adapter->msix_enabled)
+            return;
 	synchronize_irq(adapter->pdev->irq);
 }
 
@@ -3993,38 +3995,37 @@ void e1000_update_stats(struct e1000_adapter *adapter)
 	spin_unlock_irqrestore(&adapter->stats_lock, flags);
 }
 
-/**
- * e1000_intr - Interrupt Handler
- * @irq: interrupt number
- * @data: pointer to a network interface device structure
- **/
+static void e1000_msix_do_intr_ctrl(struct e1000_adapter *adapter, u32 icr)
+{
+    struct e1000_hw *hw = &adapter->hw;
 
-static irqreturn_t e1000_intr(int irq, void *data)
+    if (unlikely(icr & (E1000_ICR_RXSEQ | E1000_ICR_LSC))) {
+        hw->get_link_status = 1;
+        /* guard against interrupt when we're going down */
+        if (!test_bit(__E1000_DOWN, &adapter->flags))
+            schedule_delayed_work(&adapter->watchdog_task, 1);
+    }
+}
+
+static irqreturn_t e1000_msix_intr_ctrl(int irq, void *data)
 {
 	struct net_device *netdev = data;
 	struct e1000_adapter *adapter = netdev_priv(netdev);
 	struct e1000_hw *hw = &adapter->hw;
 	u32 icr = er32(ICR);
 
-	if (unlikely((!icr)))
-		return IRQ_NONE;  /* Not our interrupt */
+        e1000_msix_do_intr_ctrl(adapter, icr);
 
-	/*
-	 * we might have caused the interrupt, but the above
-	 * read cleared it, and just in case the driver is
-	 * down there is nothing to do so return handled
-	 */
-	if (unlikely(test_bit(__E1000_DOWN, &adapter->flags)))
-		return IRQ_HANDLED;
+        return IRQ_HANDLED;
+}
 
-	if (unlikely(icr & (E1000_ICR_RXSEQ | E1000_ICR_LSC))) {
-		hw->get_link_status = 1;
-		/* guard against interrupt when we're going down */
-		if (!test_bit(__E1000_DOWN, &adapter->flags))
-			schedule_delayed_work(&adapter->watchdog_task, 1);
-	}
+static irqreturn_t e1000_msix_intr_data(int irq, void *data)
+{
+	struct net_device *netdev = data;
+	struct e1000_adapter *adapter = netdev_priv(netdev);
+	struct e1000_hw *hw = &adapter->hw;
 
-	if (adapter->csb_mode && icr & (E1000_ICR_TXDW | E1000_ICR_TXQE)) {
+	if (adapter->csb_mode) {
 	    /* Wakes the TX queue so that the start_xmit() method can
 	       clean used TX descriptors and continue transmitting. */
 	    adapter->csb->guest_need_txkick = 0;
@@ -4051,17 +4052,20 @@ static irqreturn_t e1000_intr(int irq, void *data)
 			e1000_irq_enable(adapter);
 	}
 
-	return IRQ_HANDLED;
+    return IRQ_HANDLED;
 }
 
-static irqreturn_t e1000_msix_intr_ctrl(int irq, void *data)
+/**
+ * e1000_intr - Interrupt Handler
+ * @irq: interrupt number
+ * @data: pointer to a network interface device structure
+ **/
+static irqreturn_t e1000_intr(int irq, void *data)
 {
 	struct net_device *netdev = data;
 	struct e1000_adapter *adapter = netdev_priv(netdev);
 	struct e1000_hw *hw = &adapter->hw;
 	u32 icr = er32(ICR);
-
-printk("ctrl interrupt received: ICR = %X\n", icr);
 
 	if (unlikely((!icr)))
 		return IRQ_NONE;  /* Not our interrupt */
@@ -4073,56 +4077,9 @@ printk("ctrl interrupt received: ICR = %X\n", icr);
 	if (unlikely(test_bit(__E1000_DOWN, &adapter->flags)))
 		return IRQ_HANDLED;
 
-	if (unlikely(icr & (E1000_ICR_RXSEQ | E1000_ICR_LSC))) {
-		hw->get_link_status = 1;
-		/* guard against interrupt when we're going down */
-		if (!test_bit(__E1000_DOWN, &adapter->flags))
-			schedule_delayed_work(&adapter->watchdog_task, 1);
-	}
+        e1000_msix_do_intr_ctrl(adapter, icr);
 
-        return IRQ_HANDLED;
-}
-
-static irqreturn_t e1000_msix_intr_data(int irq, void *data)
-{
-	struct net_device *netdev = data;
-	struct e1000_adapter *adapter = netdev_priv(netdev);
-	struct e1000_hw *hw = &adapter->hw;
-
-        if (!adapter->csb_mode) {
-            printk("AAAAAAAAAAAAAAAAAAAAAAAH\n");
-            return IRQ_HANDLED;
-        }
-
-	if (adapter->csb_mode) {
-	    /* Wakes the TX queue so that the start_xmit() method can
-	       clean used TX descriptors and continue transmitting. */
-	    adapter->csb->guest_need_txkick = 0;
-	    netif_wake_queue(netdev);
-	}
-	if (!adapter->csb_mode) {
-		/* disable interrupts, without the synchronize_irq bit */
-		ew32(IMC, ~0);
-		E1000_WRITE_FLUSH();
-	}
-
-	if (likely(napi_schedule_prep(&adapter->napi))) {
-		if (adapter->csb_mode)
-			adapter->csb->guest_need_rxkick = 0;
-		adapter->total_tx_bytes = 0;
-		adapter->total_tx_packets = 0;
-		adapter->total_rx_bytes = 0;
-		adapter->total_rx_packets = 0;
-		__napi_schedule(&adapter->napi);
-	} else {
-		/* this really should not happen! if it does it is basically a
-		 * bug, but not a hard error, so enable ints and continue
-		 */
-		if (!test_bit(__E1000_DOWN, &adapter->flags))
-			e1000_irq_enable(adapter);
-	}
-
-    return IRQ_HANDLED;
+	return e1000_msix_intr_data(irq, data);
 }
 
 /**
