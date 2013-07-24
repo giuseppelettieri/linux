@@ -136,7 +136,8 @@ static struct net_device_stats * e1000_get_stats(struct net_device *netdev);
 static int e1000_change_mtu(struct net_device *netdev, int new_mtu);
 static int e1000_set_mac(struct net_device *netdev, void *p);
 static irqreturn_t e1000_intr(int irq, void *data);
-static irqreturn_t e1000_msix_intr(int irq, void *data);
+static irqreturn_t e1000_msix_intr_ctrl(int irq, void *data);
+static irqreturn_t e1000_msix_intr_data(int irq, void *data);
 static bool e1000_clean_tx_irq(struct e1000_adapter *adapter,
 			       struct e1000_tx_ring *tx_ring);
 static int e1000_clean(struct napi_struct *napi, int budget);
@@ -287,7 +288,7 @@ module_exit(e1000_exit_module);
    all the necessary allocations. */
 static int e1000_request_msix_vectors(struct e1000_adapter *adapter)
 {
-    int num_vectors = 1;
+    int num_vectors = 2;
     int i;
     int err = -ENOMEM;
 
@@ -320,13 +321,18 @@ static int e1000_request_msix_vectors(struct e1000_adapter *adapter)
     if (err)
 	goto enable_msix;
 
-    adapter->msix_enabled = 1;
-
     err = request_irq(adapter->msix_entries[0].vector,
-	    e1000_msix_intr, 0, adapter->netdev->name, adapter->netdev);
-    if (!err)
-	return 0;
+	    e1000_msix_intr_ctrl, 0, "e1000-msix-ctrl"/*adapter->netdev->name*/, adapter->netdev);
+    if (err)
+        goto request_irq_1;
 
+    err = request_irq(adapter->msix_entries[1].vector,
+	    e1000_msix_intr_data, 0, "e1000-msix-data", adapter->netdev);
+    if (!err)
+        return 0;
+    
+    free_irq(adapter->msix_entries[0].vector, adapter->netdev);
+request_irq_1:
     pci_disable_msix(adapter->pdev);
 enable_msix:
     for (i=num_vectors-1; i>=0; i--)
@@ -345,15 +351,8 @@ static int e1000_request_irq(struct e1000_adapter *adapter)
 	int irq_flags = IRQF_SHARED;
 	int err;
 
-        if (adapter->csb_mode) {
-                /* This must be executed after e1000_configure_csb(). */
-                adapter->msix_enabled = 0;
-                err = e1000_request_msix_vectors(adapter);
-                if (err)
-                        printk("[e1000] Unable to allocate MSI-X vectors\n");
-                else
-                        printk("[e1000] Interrupt mode: MSI-X\n");
-        }
+        if (adapter->msix_enabled)
+            return 0;
 
 	err = request_irq(adapter->pdev->irq, handler, irq_flags, netdev->name,
 	                  netdev);
@@ -367,16 +366,9 @@ static int e1000_request_irq(struct e1000_adapter *adapter)
 static void e1000_free_irq(struct e1000_adapter *adapter)
 {
 	struct net_device *netdev = adapter->netdev;
-        int num_vectors = 1, i;
 
-        if (adapter->msix_enabled) {
-                free_irq(adapter->msix_entries[0].vector, netdev);
-                pci_disable_msix(adapter->pdev);
-                for (i=num_vectors-1; i>=0; i--)
-                        free_cpumask_var(adapter->msix_affinity_masks[i]);
-                kfree(adapter->msix_affinity_masks);
-                kfree(adapter->msix_entries);
-        }
+        if (adapter->msix_enabled)
+            return;
 	free_irq(adapter->pdev->irq, netdev);
 }
 
@@ -493,13 +485,22 @@ static void e1000_configure(struct e1000_adapter *adapter)
 	}
 }
 
-int e1000_configure_csb(struct e1000_adapter * adapter)
+static int e1000_configure_csb(struct e1000_adapter * adapter)
 {
 	struct e1000_hw *hw = &adapter->hw;
 
 	/* Probe for paravirtual device extension. */
 	if (adapter->pdev->subsystem_device == E1000_PARAVIRT_SUBDEV) {
 		printk("[e1000] Device supports paravirtualization\n");
+
+                /* Try to allocate a MSI-X interrupt vector. */
+                adapter->msix_enabled = e1000_request_msix_vectors(adapter);
+                adapter->msix_enabled = !adapter->msix_enabled;
+                if (adapter->msix_enabled)
+                    printk("[e1000] Interrupt mode: MSI-X\n");
+                else
+                    printk("[e1000] Unable to allocate MSI-X vectors\n");
+
 		/* Allocate the CSB.*/
 		adapter->csb = kmalloc(NET_PARAVIRT_CSB_SIZE, GFP_KERNEL);
 		if (!adapter->csb) {
@@ -521,6 +522,7 @@ int e1000_configure_csb(struct e1000_adapter * adapter)
 		adapter->csb->guest_need_txkick = 0;
 		adapter->csb->guest_txkick_at = NET_PARAVIRT_NONE;
 		adapter->csb->guest_need_rxkick = 1;
+                adapter->csb->guest_use_msix = adapter->msix_enabled;
 		adapter->csb->host_txcycles_lim = 1;
 		adapter->csb->host_txcycles = 0;
 		adapter->csb->vnet_ring_high = (adapter->rx_ring->vnet_dma >> 32);
@@ -547,9 +549,28 @@ int e1000_configure_csb(struct e1000_adapter * adapter)
 	} else {
 	    adapter->csb = NULL;
 	    adapter->csb_mode = 0;
+            adapter->msix_enabled = 0;
 	}
 
 	return 0;
+}
+
+static void e1000_free_csb(struct e1000_adapter *adapter)
+{
+        int num_vectors = 2, i;
+
+        if (adapter->msix_enabled) {
+                free_irq(adapter->msix_entries[0].vector, adapter->netdev);
+                free_irq(adapter->msix_entries[1].vector, adapter->netdev);
+                pci_disable_msix(adapter->pdev);
+                for (i=num_vectors-1; i>=0; i--)
+                        free_cpumask_var(adapter->msix_affinity_masks[i]);
+                kfree(adapter->msix_affinity_masks);
+                kfree(adapter->msix_entries);
+        }
+
+	if (adapter->csb)
+		kfree(adapter->csb);
 }
 
 int e1000_up(struct e1000_adapter *adapter)
@@ -1564,9 +1585,9 @@ static int e1000_open(struct net_device *netdev)
 	if (e1000_configure_csb(adapter) < 0)
 	    goto err_alloc_csb;
 
-	err = e1000_request_irq(adapter);
-	if (err)
-		goto err_req_irq;
+        err = e1000_request_irq(adapter);
+        if (err)
+            goto err_req_irq;
 
 	/* From here on the code is the same as e1000_up() */
 	clear_bit(__E1000_DOWN, &adapter->flags);
@@ -1588,8 +1609,7 @@ static int e1000_open(struct net_device *netdev)
 
 err_req_irq:
 	e1000_power_down_phy(adapter);
-	if (adapter->csb)
-		kfree(adapter->csb);
+        e1000_free_csb(adapter);
 err_alloc_csb:
 	e1000_free_all_rx_resources(adapter);
 err_setup_rx:
@@ -1625,8 +1645,7 @@ static int e1000_close(struct net_device *netdev)
 	e1000_power_down_phy(adapter);
 	e1000_free_irq(adapter);
 
-	if (adapter->csb)
-		kfree(adapter->csb);
+        e1000_free_csb(adapter);
 	e1000_free_all_tx_resources(adapter);
 	e1000_free_all_rx_resources(adapter);
 
@@ -3981,9 +4000,6 @@ static irqreturn_t e1000_intr(int irq, void *data)
 			schedule_delayed_work(&adapter->watchdog_task, 1);
 	}
 
-        if (adapter->msix_enabled)
-            return IRQ_HANDLED;
-
 	if (adapter->csb_mode && icr & (E1000_ICR_TXDW | E1000_ICR_TXQE)) {
 	    /* Wakes the TX queue so that the start_xmit() method can
 	       clean used TX descriptors and continue transmitting. */
@@ -4015,7 +4031,36 @@ static irqreturn_t e1000_intr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t e1000_msix_intr(int irq, void *data)
+static irqreturn_t e1000_msix_intr_ctrl(int irq, void *data)
+{
+	struct net_device *netdev = data;
+	struct e1000_adapter *adapter = netdev_priv(netdev);
+	struct e1000_hw *hw = &adapter->hw;
+	u32 icr = er32(ICR);
+
+printk("ctrl interrupt received: ICR = %X\n", icr);
+
+	if (unlikely((!icr)))
+		return IRQ_NONE;  /* Not our interrupt */
+
+	/* we might have caused the interrupt, but the above
+	 * read cleared it, and just in case the driver is
+	 * down there is nothing to do so return handled
+	 */
+	if (unlikely(test_bit(__E1000_DOWN, &adapter->flags)))
+		return IRQ_HANDLED;
+
+	if (unlikely(icr & (E1000_ICR_RXSEQ | E1000_ICR_LSC))) {
+		hw->get_link_status = 1;
+		/* guard against interrupt when we're going down */
+		if (!test_bit(__E1000_DOWN, &adapter->flags))
+			schedule_delayed_work(&adapter->watchdog_task, 1);
+	}
+
+        return IRQ_HANDLED;
+}
+
+static irqreturn_t e1000_msix_intr_data(int irq, void *data)
 {
 	struct net_device *netdev = data;
 	struct e1000_adapter *adapter = netdev_priv(netdev);
@@ -4023,6 +4068,7 @@ static irqreturn_t e1000_msix_intr(int irq, void *data)
 
         if (!adapter->csb_mode) {
             printk("AAAAAAAAAAAAAAAAAAAAAAAH\n");
+            return IRQ_HANDLED;
         }
 
 	if (adapter->csb_mode) {
