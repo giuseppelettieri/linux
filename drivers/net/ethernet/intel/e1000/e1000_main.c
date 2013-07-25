@@ -284,63 +284,44 @@ static void __exit e1000_exit_module(void)
 
 module_exit(e1000_exit_module);
 
-/* Ask the kernel for num_vectors MSI-X interrupt vectors and do
-   all the necessary allocations. */
+/* Ask the kernel for num_vectors MSI-X interrupt. */
 static int e1000_request_msix_vectors(struct e1000_adapter *adapter)
 {
-    int num_vectors = 2;
-    int i;
-    int err = -ENOMEM;
+        int err = -ENOMEM;
 
-    adapter->msix_entries = kmalloc(num_vectors *
-				sizeof(struct msix_entry), GFP_KERNEL);
-    if (!adapter->msix_entries)
-	return -ENOMEM;
+        adapter->msix_entries[0].entry = 0;
+        adapter->msix_entries[1].entry = 1;
 
-    adapter->msix_affinity_masks = kzalloc(num_vectors *
-				    sizeof(cpumask_var_t), GFP_KERNEL);
-    if (!adapter->msix_affinity_masks)
-	goto alloc_affinity_masks;
+        memset(&adapter->msix_affinity_masks, 0, 2 * sizeof(cpumask_var_t));
+        if (!alloc_cpumask_var(&adapter->msix_affinity_masks[0], GFP_KERNEL))
+                return -ENOMEM;
+        if (!alloc_cpumask_var(&adapter->msix_affinity_masks[1], GFP_KERNEL))
+                goto alloc_cpumask_2;
 
-    for (i=0; i<num_vectors; i++)
-	if (!alloc_cpumask_var(&adapter->msix_affinity_masks[i],
-		GFP_KERNEL)) {
-	    i--;
-	    for (; i>=0; i--)
-		free_cpumask_var(adapter->msix_affinity_masks[i]);
-	    goto alloc_cpumasks;
-	}
+        /* pci_enable_msix returns > 0 if we can't get so many vectors. */
+        err = pci_enable_msix(adapter->pdev, adapter->msix_entries, 2);
+        if (err > 0)
+	        err = -ENOSPC;
+        if (err)
+	        goto enable_msix;
 
-    for (i = 0; i<num_vectors; ++i)
-	adapter->msix_entries[i].entry = i;
+        err = request_irq(adapter->msix_entries[0].vector,
+            e1000_msix_intr_ctrl, 0, "e1000-msix-ctrl", adapter->netdev);
+        if (err)
+                goto request_irq_1;
 
-    /* pci_enable_msix returns positive if we can't get so many vectors. */
-    err = pci_enable_msix(adapter->pdev, adapter->msix_entries, num_vectors);
-    if (err > 0)
-	err = -ENOSPC;
-    if (err)
-	goto enable_msix;
-
-    err = request_irq(adapter->msix_entries[0].vector,
-	    e1000_msix_intr_ctrl, 0, "e1000-msix-ctrl"/*adapter->netdev->name*/, adapter->netdev);
-    if (err)
-        goto request_irq_1;
-
-    err = request_irq(adapter->msix_entries[1].vector,
+        err = request_irq(adapter->msix_entries[1].vector,
 	    e1000_msix_intr_data, 0, "e1000-msix-data", adapter->netdev);
-    if (!err)
-        return 0;
+        if (!err)
+                return 0;
     
-    free_irq(adapter->msix_entries[0].vector, adapter->netdev);
+        free_irq(adapter->msix_entries[0].vector, adapter->netdev);
 request_irq_1:
-    pci_disable_msix(adapter->pdev);
+        pci_disable_msix(adapter->pdev);
 enable_msix:
-    for (i=num_vectors-1; i>=0; i--)
-	free_cpumask_var(adapter->msix_affinity_masks[i]);
-alloc_cpumasks:
-    kfree(adapter->msix_affinity_masks);
-alloc_affinity_masks:
-    kfree(adapter->msix_entries);
+        free_cpumask_var(adapter->msix_affinity_masks[1]);
+alloc_cpumask_2:
+	free_cpumask_var(adapter->msix_affinity_masks[0]);
     return err;
 }
 
@@ -559,18 +540,13 @@ static int e1000_configure_csb(struct e1000_adapter * adapter)
 
 static void e1000_free_csb(struct e1000_adapter *adapter)
 {
-        int num_vectors = 2, i;
-
         if (adapter->msix_enabled) {
                 free_irq(adapter->msix_entries[0].vector, adapter->netdev);
                 free_irq(adapter->msix_entries[1].vector, adapter->netdev);
                 pci_disable_msix(adapter->pdev);
-                for (i=num_vectors-1; i>=0; i--)
-                        free_cpumask_var(adapter->msix_affinity_masks[i]);
-                kfree(adapter->msix_affinity_masks);
-                kfree(adapter->msix_entries);
+                free_cpumask_var(adapter->msix_affinity_masks[0]);
+                free_cpumask_var(adapter->msix_affinity_masks[1]);
         }
-
 	if (adapter->csb)
 		kfree(adapter->csb);
 }
