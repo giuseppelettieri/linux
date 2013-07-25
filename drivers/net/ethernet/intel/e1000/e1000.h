@@ -330,8 +330,8 @@ struct e1000_adapter {
 	unsigned long csb_phyaddr;	/* CSB physical address. */
 	unsigned csb_mode;	/* = adapter->csb && adapter->csb_guest_csb_on */
         /* MSI-X support */
-        struct msix_entry *msix_entries;
-        cpumask_var_t *msix_affinity_masks;
+        struct msix_entry msix_entries[2];
+        cpumask_var_t msix_affinity_masks[2];
         int msix_enabled;
 
 };
