@@ -2895,9 +2895,10 @@ static int e1000_tso(struct e1000_adapter *adapter,
 		mss = skb_shinfo(skb)->gso_size;
 		if (skb->protocol == htons(ETH_P_IP)) {
 			struct iphdr *iph = ip_hdr(skb);
-			if (!adapter->csb_mode)
+			if (!adapter->csb_mode) {
 			    iph->tot_len = 0;
-			iph->check = 0;
+			    iph->check = 0;
+                        }
 			tcp_hdr(skb)->check = ~csum_tcpudp_magic(iph->saddr,
 								 iph->daddr, 0,
 								 IPPROTO_TCP,
@@ -3164,7 +3165,7 @@ static void e1000_tx_queue(struct e1000_adapter *adapter,
 			     E1000_TXD_CMD_TSE;
 		txd_upper |= E1000_TXD_POPTS_TXSM << 8;
 
-		if (likely(tx_flags & E1000_TX_FLAGS_IPV4))
+		if (!adapter->csb_mode && tx_flags & E1000_TX_FLAGS_IPV4)
 			txd_upper |= E1000_TXD_POPTS_IXSM << 8;
 	}
 
