@@ -2896,13 +2896,13 @@ static int e1000_tso(struct e1000_adapter *adapter,
 		if (skb->protocol == htons(ETH_P_IP)) {
 			struct iphdr *iph = ip_hdr(skb);
 			if (!adapter->csb_mode) {
-			    iph->tot_len = 0;
-			    iph->check = 0;
-                        }
-			tcp_hdr(skb)->check = ~csum_tcpudp_magic(iph->saddr,
+			        iph->tot_len = 0;
+			        iph->check = 0;
+			        tcp_hdr(skb)->check = ~csum_tcpudp_magic(iph->saddr,
 								 iph->daddr, 0,
 								 IPPROTO_TCP,
 								 0);
+                        }
 			cmd_length = E1000_TXD_CMD_IP;
 			ipcse = skb_transport_offset(skb) - 1;
 		} else if (skb->protocol == htons(ETH_P_IPV6)) {
