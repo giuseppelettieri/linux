@@ -686,6 +686,7 @@ void e1000_down(struct e1000_adapter *adapter)
 	e1000_reset(adapter);
 	e1000_clean_all_tx_rings(adapter);
 	e1000_clean_all_rx_rings(adapter);
+        e1000_free_csb(adapter);
 }
 
 static void e1000_reinit_safe(struct e1000_adapter *adapter)
@@ -1600,7 +1601,6 @@ static int e1000_close(struct net_device *netdev)
 	e1000_power_down_phy(adapter);
 	e1000_free_irq(adapter);
 
-        e1000_free_csb(adapter);
 	e1000_free_all_tx_resources(adapter);
 	e1000_free_all_rx_resources(adapter);
 
