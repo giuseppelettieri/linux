@@ -472,8 +472,8 @@ static int e1000_configure_csb(struct e1000_adapter * adapter)
 {
 	struct e1000_hw *hw = &adapter->hw;
 
-	/* Probe for paravirtual device extension. */
-	if (adapter->pdev->subsystem_device == E1000_PARAVIRT_SUBDEV) {
+	/* Probe for paravirtual device extension, if required. */
+	if (paravirtual && adapter->pdev->subsystem_device == E1000_PARAVIRT_SUBDEV) {
 		printk("[e1000] Device supports paravirtualization\n");
 
                 /* Try to allocate a MSI-X interrupt vector. */
@@ -498,7 +498,7 @@ static int e1000_configure_csb(struct e1000_adapter * adapter)
 		adapter->csb->host_tdh = er32(TDH);
 		adapter->csb->host_rdh = er32(RDH);
 
-		adapter->csb->guest_csb_on = paravirtual ? 1 : 0;
+		adapter->csb->guest_csb_on = 1;
 		adapter->csb->host_need_txkick = 1;
 		adapter->csb->host_need_rxkick = 1;
 		adapter->csb->host_rxkick_at = NET_PARAVIRT_NONE;
