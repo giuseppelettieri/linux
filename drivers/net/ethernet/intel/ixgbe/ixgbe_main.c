@@ -6863,10 +6863,6 @@ int ixgbe_open(struct net_device *netdev)
 
 	udp_tunnel_nic_reset_ntf(netdev);
 
-#ifdef DEV_NETMAP
-	ixgbe_netmap_attach(adapter);
-#endif /* DEV_NETMAP */
-
 	return 0;
 
 err_set_queues:
@@ -11096,6 +11092,10 @@ skip_sriov:
 	err = ixgbe_mii_bus_init(hw);
 	if (err)
 		goto err_netdev;
+
+#ifdef DEV_NETMAP
+	ixgbe_netmap_attach(adapter);
+#endif /* DEV_NETMAP */
 
 	return 0;
 
