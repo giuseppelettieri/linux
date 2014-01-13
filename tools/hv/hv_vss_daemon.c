@@ -44,6 +44,10 @@ static struct sockaddr_nl addr;
 #define SOL_NETLINK 270
 #endif
 
+#ifndef CN_VSS_IDX
+#define CN_VSS_IDX                      0xA     /* HyperV VSS */
+#define CN_VSS_VAL                      0x1     /* queries from the kernel */
+#endif
 
 static int vss_do_freeze(char *dir, unsigned int cmd, char *fs_op)
 {
