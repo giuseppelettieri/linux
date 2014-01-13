@@ -564,6 +564,7 @@ classmate-laptop
 clearpad_tm1217
 clip
 clk-max77686
+clk-s2mps11
 clk-si5351
 clk-twl6040
 clk-wm831x
@@ -1488,6 +1489,8 @@ ideapad-laptop
 ideapad_slidebar
 idmouse
 idt77252
+idtcps
+idt_gen2
 ie6xx_wdt
 ieee802154
 ifb
@@ -3628,6 +3631,9 @@ tsc2007
 tsc40
 tscan1
 ts_fsm
+tsi568
+tsi57x
+tsi721_mport
 ts_kmp
 tsl2550
 tsl2563

@@ -1,4 +1,23 @@
-linux-lts-trusty (3.13.0-2.17~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-3.18~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * rebase to v3.13-rc8
+  * [Packaging] efi -- allow EFI signatures on any arch
+
+  [ Tim Gardner ]
+
+  * [Config] Fix vcs-git path
+  * Release Tracking Bug
+    - LP: #1268683
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to v3.13-rc8
+
+ -- Andy Whitcroft <apw@canonical.com>  Sun, 12 Jan 2014 11:58:01 +0000
+
+linux (3.13.0-2.17) trusty; urgency=low
 
   [ Andy Whitcroft ]
 
