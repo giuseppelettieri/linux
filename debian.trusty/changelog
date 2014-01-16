@@ -1,4 +1,30 @@
-linux-lts-trusty (3.13.0-3.18~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-4.19~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * [Config] libunwind8-dev is now available for ppc64el
+  * [Packaging] tools -- make cpupower optional
+  * [Packaging] tools -- enable correctly for x86
+
+  [ Tim Gardner ]
+
+  * Release Tracking Bug
+    - LP: #1269872
+
+  [ Upstream Kernel Changes ]
+
+  * SAUCE: ARM: OMAP: hwmod: Add SYSC offsets for AES IP
+  * SAUCE: ARM: OMAP4: hwmod: Add hwmod data for AES IP
+  * SAUCE: OMAP: AM33xx: hwmod: Correct AES module SYSC type
+  * SAUCE: crypto: omap-aes: add error check for pm_runtime_get_sync
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to 85ce70fdf48aa290b4845311c2dd815d7f8d1fa5
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Wed, 15 Jan 2014 13:23:05 +0000
+
+linux (3.13.0-3.18) trusty; urgency=low
 
   [ Andy Whitcroft ]
 

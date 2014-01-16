@@ -17,6 +17,7 @@ do_source_package=false
 do_doc_package  = false
 
 do_tools        = true
+do_tools_cpupower = true
 do_tools_perf   = true
 do_tools_x86	= true
 do_tools_hyperv	= true
