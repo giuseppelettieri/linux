@@ -1,4 +1,29 @@
-linux-lts-trusty (3.13.0-4.19~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-5.20~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * [Packaging] tools -- do not make symlinks when not making packages
+  * [Packaging] tools -- tidy up control.stub.in ordering
+  * [Packaging] tools -- tools-common is shared and not conditional
+  * rebase to v3.13
+
+  [ Dirk Brandewie ]
+
+  * SAUCE: intel_pstate: Add setting voltage value for baytrail P states.
+
+  [ KY Srinivasan ]
+
+  * SAUCE: Drivers: hv: vmbus: Specify the target CPU that should receive
+    notification
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to v3.13
+   - LP: #1270603
+
+ -- Andy Whitcroft <apw@canonical.com>  Fri, 17 Jan 2014 15:45:31 +0000
+
+linux (3.13.0-4.19) trusty; urgency=low
 
   [ Andy Whitcroft ]
 
