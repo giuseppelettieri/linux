@@ -112,9 +112,9 @@ for i in CONFIG_MEGARAID_LEGACY CONFIG_MEGARAID_MAILBOX CONFIG_MEGARAID_MM CONFI
 do
 	echo "$i=n" >> debian.trusty/config/armhf/config.common.armhf
 done
-# Drop generic-lpae and lowlatency
+# Drop lowlatency
 sed -i 's/lowlatency//g' ${DEBIAN_TARGET}/rules.d/*.mk
-for i in lowlatency generic-lpae
+for i in lowlatency
 do
 	find ${DEBIAN_TARGET}/config | grep $i | xargs rm -f
 	find ${DEBIAN_TARGET}/control.d | grep $i | xargs rm -f
