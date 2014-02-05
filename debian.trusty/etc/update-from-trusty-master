@@ -106,11 +106,9 @@ rsync -av --delete ${DEBIAN_SOURCE}/config/ ${DEBIAN_TARGET}/config
 # Build in these 2 modules for arm in order to avoid
 # a missing __aeabi_uldivmod symbol.
 #
-#sed -i 's/CONFIG_DM_CACHE=m/CONFIG_DM_CACHE=y/' debian.trusty/config/config.common.ubuntu
-#sed -i 's/CONFIG_MEGARAID_SAS=m/CONFIG_MEGARAID_SAS=y/' debian.trusty/config/config.common.ubuntu
 for i in CONFIG_MEGARAID_LEGACY CONFIG_MEGARAID_MAILBOX CONFIG_MEGARAID_MM CONFIG_MEGARAID_NEWGEN CONFIG_MEGARAID_SAS
 do
-	echo "$i=n" >> debian.trusty/config/armhf/config.common.armhf
+	echo "$i=n" >> ${DEBIAN_TARGET}/config/armhf/config.common.armhf
 done
 # Drop lowlatency
 sed -i 's/lowlatency//g' ${DEBIAN_TARGET}/rules.d/*.mk
@@ -119,6 +117,9 @@ do
 	find ${DEBIAN_TARGET}/config | grep $i | xargs rm -f
 	find ${DEBIAN_TARGET}/control.d | grep $i | xargs rm -f
 done
+# Make sure CONFIG_SECURITY_APPARMOR_AA3_SEMANTICS=n
+sed -i 's/CONFIG_SECURITY_APPARMOR_AA3_SEMANTICS=y/CONFIG_SECURITY_APPARMOR_AA3_SEMANTICS=n/' ${DEBIAN_TARGET}/config/config.* ${DEBIAN_TARGET}/config/*/config.*
+
 fakeroot debian/rules clean updateconfigs
 
 #
