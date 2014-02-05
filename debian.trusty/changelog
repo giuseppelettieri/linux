@@ -1,4 +1,45 @@
-linux-lts-trusty (3.13.0-6.23~precise2) precise; urgency=low
+linux-lts-trusty (3.13.0-7.25~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * Revert "SAUCE: fix fmd headers"
+  * SAUCE: fix fmd headers
+
+ -- Andy Whitcroft <apw@canonical.com>  Tue, 04 Feb 2014 09:36:09 +0000
+
+linux (3.13.0-7.24) trusty; urgency=low
+
+  [ Stefan Bader ]
+
+  * [Config] Make vmwgfx driver enable the framebuffer device
+
+  [ Tim Gardner ]
+
+  * rebase to v3.13.1
+  * [Config] CONFIG_NFS_FS=m for ppc64el
+  * [Config] CONFIG_X86_SYSFB=n
+    https://lists.ubuntu.com/archives/kernel-team/2014-February/038166.html
+  * Release Tracking Bug
+    - LP: #1275898
+
+  [ Upstream Kernel Changes ]
+
+  * i2c: piix4: Add support for AMD ML and CZ SMBus changes
+    - LP: #1272525
+  * i2c: piix4: Use different message for AMD Auxiliary SMBus Controller
+    - LP: #1272525
+  * mm: ignore VM_SOFTDIRTY on VMA merging
+    - LP: #1274917
+  * drm/radeon: disable dpm on BTC
+    - LP: #1266984
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to v3.13.1
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Thu, 30 Jan 2014 15:24:48 +0000
+
+linux (3.13.0-6.23) trusty; urgency=low
 
   [ Andy Whitcroft ]
 
