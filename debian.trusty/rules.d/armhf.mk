@@ -18,7 +18,7 @@ do_tools        = true
 do_tools_cpupower = true
 do_tools_perf   = true
 do_tools_x86	= false
-do_tools_hyperv	= true
+do_tools_hyperv	= false
 
 # Flavour specific configuration.
 dtb_files_generic	+= highbank.dtb
