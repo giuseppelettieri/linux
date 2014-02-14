@@ -1,4 +1,97 @@
-linux-lts-trusty (3.13.0-8.27~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-9.29~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * Release Tracking Bug
+    - LP: #1280291
+  * [Config] lowlatency -- turn CONFIG_IRQ_FORCED_THREADING_DEFAULT off
+    temporarily
+  * [Packaging] tools -- split out "cloud only" tools into a cloud tools
+    package
+
+  [ Paolo Pisati ]
+
+  * [Config] armhf: DISPLAY_CONNECTOR_HDMI && DISPLAY_ENCODER_TPD12S015 =y
+
+  [ Tim Gardner ]
+
+  * rebase to v3.13.3
+
+  [ Upstream Kernel Changes ]
+
+  * Revert "mmc: sdhci-pci: Fix possibility of chip->fixes being null"
+  * Revert "mmc: sdhci-pci: Fix BYT sd card getting stuck in runtime
+    suspend"
+  * NVMe: Avoid shift operation when writing cq head doorbell
+    - LP: #1256155
+  * NVMe: remove deprecated IRQF_DISABLED
+    - LP: #1256155
+  * NVMe: compat SG_IO ioctl
+    - LP: #1256155
+  * NVMe: Fix lockdep warnings
+    - LP: #1256155
+  * NVMe: Cache dev->pci_dev in a local pointer
+    - LP: #1256155
+  * NVMe: Device resume error handling
+    - LP: #1256155
+  * NVMe: Schedule reset for failed controllers
+    - LP: #1256155
+  * NVMe: Abort timed out commands
+    - LP: #1256155
+  * NVMe: Surprise removal handling
+    - LP: #1256155
+  * NVMe: Async IO queue deletion
+    - LP: #1256155
+  * NVMe: Dynamically allocate partition numbers
+    - LP: #1256155
+  * NVMe: Disable admin queue on init failure
+    - LP: #1256155
+  * NVMe: Add a pci_driver shutdown method
+    - LP: #1256155
+  * NVMe: Include device and queue numbers in interrupt name
+    - LP: #1256155
+  * NVMe: Correct uses of INIT_WORK
+    - LP: #1256155
+  * NVMe: Namespace use after free on surprise removal
+    - LP: #1256155
+  * intel_pstate: Add setting voltage value for baytrail P states.
+    - LP: #1270736
+  * mmc: sdhci-pci: break out definitions to header file
+  * mmc: sdhci-pci: add support of O2Micro/BayHubTech SD hosts
+  * mmc: sdhci-pci: Fix BYT sd card getting stuck in runtime suspend
+  * mmc: sdhci-pci: Fix possibility of chip->fixes being null
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to v3.13.3
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Thu, 13 Feb 2014 06:08:09 -0700
+
+linux (3.13.0-8.28) trusty; urgency=low
+
+  [ Tim Gardner ]
+
+  * Release Tracking Bug
+    - LP: #1278963
+
+  [ Paolo Pisati ]
+
+  * [Config] armhf: RTC_DRV_PL031=y
+
+  [ Serge Hallyn ]
+
+  * SAUCE: Overlayfs: allow unprivileged mounts
+
+  [ Upstream Kernel Changes ]
+
+  * kexec: add sysctl to disable kexec_load
+    - LP: #1259570
+  * SELinux:  Fix kernel BUG on empty security contexts.
+    - CVE-2014-1874
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Tue, 11 Feb 2014 08:35:39 -0500
+
+linux (3.13.0-8.27) trusty; urgency=low
 
   [ John Johansen ]
 
