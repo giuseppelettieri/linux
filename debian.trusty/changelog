@@ -1,4 +1,90 @@
-linux-lts-trusty (3.13.0-10.30~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-13.33~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * Release Tracking Bug
+    - LP: #1284614
+  * [Config] powerpc -- CONFIG_SCSI_IBMVSCSI=y
+  * [Config] CONFIG_RT_GROUP_SCHED=n
+    - LP: #1284731
+
+  [ Stefan Bader ]
+
+  * [Config] Revert back to build IPMI as a module on all arches
+
+  [ Tim Gardner ]
+
+  * rebase to v3.13.5
+
+  [ Upstream Kernel Changes ]
+
+  * cifs: ensure that uncached writes handle unmapped areas correctly
+  * rebase to v3.13.5
+
+ -- Andy Whitcroft <apw@canonical.com>  Tue, 25 Feb 2014 12:15:09 +0000
+
+linux (3.13.0-12.32) trusty; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * Release Tracking Bug
+    - LP: #1283074
+
+  * Revert "SAUCE: Drivers: hv: vmbus: Specify the target CPU that should
+    receive notification"
+  * [Packaging] tools -- clean up generic so it gives more targetted hints
+  * [Packaging] tools -- fix relative links
+  * rebase to v3.13.4
+
+  [ Colin Ian King ]
+
+  * [Config][v2] armhf, arm64, powerpc, ppc64el: IPMI_SI=m
+
+  [ Paolo Pisati ]
+
+  * [Config] armhf: SOC_AM33XX=y
+  * [Config] armhf: TI_CPSW, TI_CPTS and TI_DAVINCI_[CPDMA|MDIO] = y
+  * [Config] armhf: RTC_DRV_OMAP=y
+  * [Config] build beaglebone and bleaglebone black dtbs
+
+  [ Tony Breeds ]
+
+  * SAUCE: powerpc/le: Ensure that the 'stop-self' RTAS token is handled
+    correctly
+    - LP: #1282712
+
+  [ Upstream Kernel Changes ]
+
+  * Drivers: hv: vmbus: Specify the target CPU that should receive
+    notification
+    - LP: #1282694
+  * Drivers: hv: vmbus: Don't timeout during the initial connection with
+    host
+    - LP: #1282694
+  * hyperv: Add support for physically discontinuous receive buffer
+    - LP: #1282695
+  * Input: hyperv-keyboard - pass through 0xE1 prefix
+    - LP: #1282699
+  * rebase to v3.13.4
+
+ -- Andy Whitcroft <apw@canonical.com>  Fri, 21 Feb 2014 12:51:17 +0000
+
+linux (3.13.0-11.31) trusty; urgency=low
+
+  [ Colin Ian King ]
+
+  * [config] Set IPMI suppoort default to "y"
+
+  [ Tim Gardner ]
+
+  * [Config] CONFIG_USER_NS=y for ppc64el
+  * [Config] CONFIG_RESOURCE_COUNTERS=y for ppc64el
+  * Release Tracking Bug
+    - LP: #1282243
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Wed, 19 Feb 2014 12:04:43 -0500
+
+linux (3.13.0-10.30) trusty; urgency=low
 
   [ Andy Whitcroft ]
 
