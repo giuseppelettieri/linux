@@ -1,4 +1,37 @@
-linux-lts-trusty (3.13.0-14.34~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-15.35~precise1) precise; urgency=low
+
+  [ Tim Gardner ]
+
+  * Release Tracking Bug
+    - LP: #1287175
+
+  [ Andy Whitcroft ]
+
+  * [Config] tools -- enable cpupower on ppc64el
+  * [Config] ppc64el -- enable perf tools
+  * [Config] powerpc -- enable perf tools
+  * [Config] ppc64el -- reduce MAX_ORDER with 64k pages
+  * [Config] ppc64el -- switch to 64K system pages
+
+  [ Benjamin Herrenschmidt ]
+
+  * SAUCE: powerpc/powernv: Add iommu DMA bypass support for IODA2
+
+  [ Paul Mackerras ]
+
+  * SAUCE: powerpc: Increase stack redzone for 64-bit userspace to 512
+    bytes
+
+  [ Upstream Kernel Changes ]
+
+  * perf trace: Fix ioctl 'request' beautifier build problems on !(i386 ||
+    x86_64) arches
+  * kvm, vmx: Really fix lazy FPU on nested guest
+    - LP: #1278531
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Mon, 03 Mar 2014 13:22:56 +0000
+
+linux (3.13.0-14.34) trusty; urgency=low
 
   [ Tim Gardner ]
 

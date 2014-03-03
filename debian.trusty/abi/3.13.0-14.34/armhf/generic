@@ -13952,6 +13952,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x3c52e964	ablkcipher_walk_phys
 EXPORT_SYMBOL_GPL vmlinux 0x3c5adf21	securityfs_remove
 EXPORT_SYMBOL_GPL vmlinux 0x3c5bacf5	ata_host_activate
 EXPORT_SYMBOL_GPL vmlinux 0x3c736722	snd_soc_new_ac97_codec
+EXPORT_SYMBOL_GPL vmlinux 0x3c7de912	pingv6_ops
 EXPORT_SYMBOL_GPL vmlinux 0x3c831441	arm_check_condition
 EXPORT_SYMBOL_GPL vmlinux 0x3c8424a0	clk_notifier_unregister
 EXPORT_SYMBOL_GPL vmlinux 0x3c8d28cc	of_get_phy_mode
@@ -14139,7 +14140,6 @@ EXPORT_SYMBOL_GPL vmlinux 0x4b6d9ac4	regulator_can_change_voltage
 EXPORT_SYMBOL_GPL vmlinux 0x4b991ec4	rtc_update_irq
 EXPORT_SYMBOL_GPL vmlinux 0x4ba1b69b	pwm_config
 EXPORT_SYMBOL_GPL vmlinux 0x4bafcdd8	btree_update
-EXPORT_SYMBOL_GPL vmlinux 0x4bb609db	ip6_datagram_recv_ctl
 EXPORT_SYMBOL_GPL vmlinux 0x4bbbec54	regmap_irq_get_domain
 EXPORT_SYMBOL_GPL vmlinux 0x4bc18626	file_ra_state_init
 EXPORT_SYMBOL_GPL vmlinux 0x4bc33200	class_dev_iter_next
@@ -15126,6 +15126,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x983ac66d	crypto_ablkcipher_type
 EXPORT_SYMBOL_GPL vmlinux 0x98503a63	mpi_alloc
 EXPORT_SYMBOL_GPL vmlinux 0x9864c665	netlink_has_listeners
 EXPORT_SYMBOL_GPL vmlinux 0x9879932b	crypto_register_notifier
+EXPORT_SYMBOL_GPL vmlinux 0x9894b33d	ip6_datagram_recv_ctl
 EXPORT_SYMBOL_GPL vmlinux 0x9895d9af	snd_soc_write
 EXPORT_SYMBOL_GPL vmlinux 0x98b9ecdd	__scsi_get_command
 EXPORT_SYMBOL_GPL vmlinux 0x98c9f584	klist_init
@@ -15681,7 +15682,6 @@ EXPORT_SYMBOL_GPL vmlinux 0xc446b77f	netlink_remove_tap
 EXPORT_SYMBOL_GPL vmlinux 0xc448f22b	kallsyms_on_each_symbol
 EXPORT_SYMBOL_GPL vmlinux 0xc454fc7b	twl_get_type
 EXPORT_SYMBOL_GPL vmlinux 0xc471c67a	twl4030_audio_disable_resource
-EXPORT_SYMBOL_GPL vmlinux 0xc480cedf	pingv6_ops
 EXPORT_SYMBOL_GPL vmlinux 0xc48b7ccf	ata_mode_string
 EXPORT_SYMBOL_GPL vmlinux 0xc4a9ba57	irq_gc_ack_set_bit
 EXPORT_SYMBOL_GPL vmlinux 0xc4b10170	dev_pm_opp_find_freq_ceil

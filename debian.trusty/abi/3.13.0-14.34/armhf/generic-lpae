@@ -12003,7 +12003,6 @@ EXPORT_SYMBOL_GPL vmlinux 0x5a3c6d36	perf_event_disable
 EXPORT_SYMBOL_GPL vmlinux 0x5a7bfe41	crypto_probing_notify
 EXPORT_SYMBOL_GPL vmlinux 0x5a8f3b69	of_irq_parse_raw
 EXPORT_SYMBOL_GPL vmlinux 0x5a9b5a0b	usb_add_phy
-EXPORT_SYMBOL_GPL vmlinux 0x5adeb59c	ip6_datagram_recv_ctl
 EXPORT_SYMBOL_GPL vmlinux 0x5af0c253	sync_page_io
 EXPORT_SYMBOL_GPL vmlinux 0x5b2b2f3e	devm_snd_soc_register_component
 EXPORT_SYMBOL_GPL vmlinux 0x5b2b632a	thermal_generate_netlink_event
@@ -13186,7 +13185,6 @@ EXPORT_SYMBOL_GPL vmlinux 0xbea5ff1e	static_key_initialized
 EXPORT_SYMBOL_GPL vmlinux 0xbead5767	device_release_driver
 EXPORT_SYMBOL_GPL vmlinux 0xbeb88283	ata_scsi_port_error_handler
 EXPORT_SYMBOL_GPL vmlinux 0xbf041102	register_vt_notifier
-EXPORT_SYMBOL_GPL vmlinux 0xbf2cdf49	pingv6_ops
 EXPORT_SYMBOL_GPL vmlinux 0xbf936506	regulator_get_mode
 EXPORT_SYMBOL_GPL vmlinux 0xbfa15048	scsi_internal_device_block
 EXPORT_SYMBOL_GPL vmlinux 0xbfcc52e7	cgroup_taskset_cur_css
@@ -13217,6 +13215,7 @@ EXPORT_SYMBOL_GPL vmlinux 0xc2630e9b	dev_get_regmap
 EXPORT_SYMBOL_GPL vmlinux 0xc26d1f5d	usb_put_dev
 EXPORT_SYMBOL_GPL vmlinux 0xc27a4858	usb_hub_find_child
 EXPORT_SYMBOL_GPL vmlinux 0xc280fb46	kdb_register
+EXPORT_SYMBOL_GPL vmlinux 0xc282a0ab	ip6_datagram_recv_ctl
 EXPORT_SYMBOL_GPL vmlinux 0xc2831542	thermal_zone_unbind_cooling_device
 EXPORT_SYMBOL_GPL vmlinux 0xc307bfcc	clk_register_mux_table
 EXPORT_SYMBOL_GPL vmlinux 0xc3352f31	ping_seq_next
@@ -13493,6 +13492,7 @@ EXPORT_SYMBOL_GPL vmlinux 0xd7790f3a	pm_generic_resume
 EXPORT_SYMBOL_GPL vmlinux 0xd77c0bc8	klist_remove
 EXPORT_SYMBOL_GPL vmlinux 0xd787b9c2	devm_regulator_bulk_unregister_supply_alias
 EXPORT_SYMBOL_GPL vmlinux 0xd788742d	perf_trace_buf_prepare
+EXPORT_SYMBOL_GPL vmlinux 0xd78cc8b1	pingv6_ops
 EXPORT_SYMBOL_GPL vmlinux 0xd7d79132	put_online_cpus
 EXPORT_SYMBOL_GPL vmlinux 0xd7dea156	sdio_writeb_readb
 EXPORT_SYMBOL_GPL vmlinux 0xd7e5861d	kvm_vcpu_on_spin

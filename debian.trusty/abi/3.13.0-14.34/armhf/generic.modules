@@ -2117,6 +2117,7 @@ omap2430
 omap3-rom-rng
 omap4-keypad
 omap-aes
+omapdrm
 omap_hdq
 omap-mailbox
 omap-ocp2scp
