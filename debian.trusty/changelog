@@ -1,4 +1,194 @@
-linux-lts-trusty (3.13.0-15.35~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-17.37~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * Release Tracking Bug
+    - LP: #1290484
+  * Revert "SAUCE: hv: Add vss daemon to Makefile"
+  * Revert "SAUCE: (no-up) tools/hv: add basic Makefile"
+  * Revert "SAUCE: (no-up) hv -- bodge hv_kvp_daemon so it can use the
+    local linux/hyperv.h"
+  * Revert "SAUCE: (no-up) hv -- bodge hv_vss_daemon so it can use the
+    local linux/hyperv.h"
+  * Revert "SAUCE: SELinux: security_load_policy: Silence frame-larger-than
+    warning"
+  * Revert "SAUCE: ARM: OMAP4460: cpuidle: Extend
+    PM_OMAP4_ROM_SMP_BOOT_ERRATUM_GICD on cpuidle"
+  * ubuntu: overlayfs -- use kernel service credentials for copy up and
+    xattr manipulations
+  * [Packaging] tools -- hv tools build correctly against the built headers
+  * [Packaging] cloud-tools -- add the hv_fcopy_daemon to the package
+  * rebase to v3.13.6
+
+  [ Anton Blanchard ]
+
+  * SAUCE: ibmveth: Fix endian issues with MAC addresses
+
+  [ Bjarke Istrup Pedersen ]
+
+  * SAUCE: hv: Add hyperv.h to uapi headers
+    - LP: #1282700
+
+  [ Fengguang Wu ]
+
+  * SAUCE: Drivers: hv: fcopy_open() can be static
+    - LP: #1282700
+
+  [ K. Y. Srinivasan ]
+
+  * SAUCE: Drivers: hv: Implement the file copy service
+    - LP: #1282700
+
+  [ Tim Gardner ]
+
+  * SAUCE: (no-up) mei: Fix stable update misapplication
+  * SAUCE: (no-up) mei_me: Add module parameter to disable MSI
+
+  [ Upstream Kernel Changes ]
+
+  * arm64: KVM: Add Kconfig option for max VCPUs per-Guest
+  * arm64: KVM: Support X-Gene guest VCPU on APM X-Gene host
+  * ACPI / EC: Clear stale EC events on Samsung systems
+  * drm/ttm: Fix TTM object open regression
+  * SELinux: security_load_policy: Silence frame-larger-than warning
+  * ARM: OMAP4460: cpuidle: Extend PM_OMAP4_ROM_SMP_BOOT_ERRATUM_GICD on
+    cpuidle
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to v3.13.6
+    - LP: #1282369
+    - LP: #1260303
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Wed, 05 Mar 2014 06:52:34 -0700
+
+linux (3.13.0-16.36) trusty; urgency=low
+
+  [ Tim Gardner ]
+
+  * Release Tracking Bug
+    - LP: #1287903
+
+  [ Andy Whitcroft ]
+
+  * Revert "[Config] lowlatency -- turn CONFIG_IRQ_FORCED_THREADING_DEFAULT
+    off temporarily"
+
+  [ Chris Bainbridge ]
+
+  * SAUCE: x86: set Pentium M as PAE capable
+    - LP: #930447
+
+  [ Dave Jones ]
+
+  * SAUCE: taint: repurpose TAINT_UNSAFE_SMP to TAINT_CPU_OUT_OF_SPEC
+    - LP: #930447
+
+  [ Paolo Pisati ]
+
+  * [Config] SND_DAVINCI_SOC && SND_AM33XX_SOC_EVM =m
+  * [Config] armhf: DRM_TILCDC=m
+
+  [ Philippe Bergheaud ]
+
+  * SAUCE: powerpc: fix xmon disassembler for little-endian
+    - LP: #1286255
+
+  [ Tim Gardner ]
+
+  * [Config] CONFIG_MICROCODE_EARLY=y
+  * [Config] CONFIG_R8821AE=m
+  * [Config] Add some virtio drivers to -virtual
+    - LP: #1287401
+  * [Config] inclusion-list: vesafb and virtio_balloon are built-in
+  * SAUCE: vmwgfx: Expose U32_MAX
+
+  [ Upstream Kernel Changes ]
+
+  * Revert "drm/vmwgfx: Fix regression caused by "drm/ttm: make ttm
+    reservation calls behave like reservation calls""
+  * Revert "drm/vmwgfx: Fix the driver for large dma addresses"
+  * usb: ehci: fix deadlock when threadirqs option is used
+    - LP: #1274987, #1279081
+  * Staging: rtl8812ae: Add Realtek 8821 PCI WIFI driver
+    - LP: #1287298
+  * intel_pstate: Remove periodic P state boost
+  * intel_pstate: Add trace point to report internal state.
+  * intel_pstate: Take core C0 time into account for core busy calculation
+  * intel_pstate: Use LFM bus ratio as min ratio/P state
+  * intel_pstate: Add support for Baytrail turbo P states
+  * intel_pstate: Change busy calculation to use fixed point math.
+  * PM / hibernate: Fix restore hang in freeze_processes()
+  * ipmi: remove deprecated IRQF_DISABLED
+  * ipmi: use USEC_PER_SEC instead of 1000000 for more meaningful
+  * ipmi: fix timeout calculation when bmc is disconnected
+  * ipmi: Cleanup error return
+  * ipmi: Add missing rv in ipmi_parisc_probe()
+  * drm/ttm: ttm object security fixes for render nodes
+  * drivers: gpu: Mark functions as static in vmwgfx_kms.c
+  * drivers: gpu: Mark functions as static in vmwgfx_buffer.c
+  * drivers: gpu: Mark functions as static in vmwgfx_fence.c
+  * drm/vmwgfx: Fix the driver for large dma addresses
+  * drm/vmwgfx: Update the svga3d register header file for new device
+    version
+  * drm/vmwgfx: Update the driver user-space interface for guest-backed
+    objects
+  * drm/vmwgfx: Replace vram_size with prim_bb_mem for calculation of max
+    resolution
+  * drm/vmwgfx: Update the svga register definition
+  * drm/vmwgfx: Adapt capability reporting to new hardware version
+  * drm/vmwgfx: Add MOB management
+  * drm/vmwgfx: Hook up MOBs to TTM as a separate memory type
+  * drm/vmwgfx: Read bounding box memory from the appropriate register
+  * drm/vmwgfx: Add the possibility to validate a buffer as a MOB
+  * drm/vmwgfx: Hook up guest-backed queries
+  * drm/vmwgfx: Detach backing store from its resources when it is evicted
+  * drm/vmwgfx: Hook up guest-backed contexts
+  * drm/vmwgfx: Hook up guest-backed surfaces
+  * drm/vmwgfx: Add guest-backed shaders
+  * drm/vmwgfx: Validate guest-backed shader const commands
+  * drm/vmwgfx: Add new unused (by user-space) commands to the verifier
+  * drm/vmwgfx: Enable 3D for new hardware version
+  * drm/vmwgfx: Fix up the vmwgfx_drv.h header for new files
+  * drm/vmwgfx: Extend the command verifier to handle guest-backed on / off
+  * drm/vmwgfx: Make sure that the multisampling is off
+  * drm/vmwgfx: Implement a buffer object synccpu ioctl.
+  * drm/vmwgfx: Add a parameter to get max MOB memory size
+  * drm/vmwgfx: Block the BIND_SHADERCONSTS command
+  * drm/vmwgfx: Track context bindings and scrub them upon exiting execbuf
+  * drm/vmwgfx: Persistent tracking of context bindings
+  * drm/vmwgfx: Ditch the vmw_dummy_query_bo_prepare function
+  * drm/vmwgfx: Use the linux DMA api also for MOBs
+  * drm/vmwgfx: Update otable definitions
+  * drm/vmwgfx: Fix surface framebuffer check for guest-backed surfaces
+  * drm/vmwgfx: Implement 64-bit Otable- and MOB binding v2
+  * drm/vmwgfx: Silence the device command verifier
+  * drm/vmwgfx: Invalidate surface on non-readback unbind
+  * drm/vmwgfx: Fix recently introduced sparse / smatch warnings and errors
+  * drm/vmwgfx: Don't commit staged bindings if execbuf fails
+  * drm/vmwgfx: Fix regression caused by "drm/ttm: make ttm reservation
+    calls behave like reservation calls"
+  * drm/vmwgfx: Fix SET_SHADER_CONST emulation on guest-backed devices
+  * drm/vmwgfx: Fix legacy surface reference size copyback
+  * drm/vmwgfx: Emulate legacy shaders on guest-backed devices v2
+  * drm/vmwgfx: Detect old user-space drivers and set up legacy emulation
+    v2
+  * drm/vmwgfx: Reemit context bindings when necessary v2
+  * vmwgfx: Fix unitialized stack read in vmw_setup_otable_base
+  * drm/vmwgfx: Fix a couple of sparse warnings and errors
+  * drm/vmwgfx: Get maximum mob size from register SVGA_REG_MOB_MAX_SIZE
+  * drm/vmwgfx: unlock on error path in vmw_execbuf_process()
+  * drm/vmwgfx: Remove stray const
+  * drm/vmwgfx: Fix possible integer overflow
+  * drm/vmwgfx: Fix command defines and checks
+  * drm/vmwgfx: Remove some unused surface formats
+  * drm/vmwgfx: Make sure backing mobs are cleared when allocated. Update
+    driver date.
+  * drm/vmwgfx: avoid null pointer dereference at failure paths
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Mon, 03 Mar 2014 13:04:10 -0700
+
+linux (3.13.0-15.35) trusty; urgency=low
 
   [ Tim Gardner ]
 
