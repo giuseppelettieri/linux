@@ -468,6 +468,7 @@ EXPORT_SYMBOL drivers/gpu/drm/ttm/ttm 0xc307a262	ttm_bo_device_init
 EXPORT_SYMBOL drivers/gpu/drm/ttm/ttm 0xc34bc93b	ttm_bo_evict_mm
 EXPORT_SYMBOL drivers/gpu/drm/ttm/ttm 0xc788dcb6	ttm_bo_device_release
 EXPORT_SYMBOL drivers/gpu/drm/ttm/ttm 0xcc5570db	ttm_agp_tt_create
+EXPORT_SYMBOL drivers/gpu/drm/ttm/ttm 0xce6e43a8	ttm_base_object_lookup_for_ref
 EXPORT_SYMBOL drivers/gpu/drm/ttm/ttm 0xcebddba7	ttm_pool_unpopulate
 EXPORT_SYMBOL drivers/gpu/drm/ttm/ttm 0xcf00f79a	ttm_mem_io_unlock
 EXPORT_SYMBOL drivers/gpu/drm/ttm/ttm 0xd7a41a37	ttm_vt_lock
@@ -6557,7 +6558,6 @@ EXPORT_SYMBOL vmlinux 0x27be7cc7	in6_dev_finish_destroy
 EXPORT_SYMBOL vmlinux 0x27d4052b	uart_unregister_driver
 EXPORT_SYMBOL vmlinux 0x27d91dd2	__netif_schedule
 EXPORT_SYMBOL vmlinux 0x27dcd0a5	skb_mac_gso_segment
-EXPORT_SYMBOL vmlinux 0x27f29e76	netif_skb_features
 EXPORT_SYMBOL vmlinux 0x281823c5	__kfifo_out_peek
 EXPORT_SYMBOL vmlinux 0x28211f6a	blk_init_tags
 EXPORT_SYMBOL vmlinux 0x289e006d	serio_unregister_port
@@ -7996,6 +7996,7 @@ EXPORT_SYMBOL vmlinux 0x7deff673	dm_consume_args
 EXPORT_SYMBOL vmlinux 0x7df13071	tty_port_tty_set
 EXPORT_SYMBOL vmlinux 0x7e173032	dmaengine_get_unmap_data
 EXPORT_SYMBOL vmlinux 0x7e394c4e	sysctl_local_reserved_ports
+EXPORT_SYMBOL vmlinux 0x7e4ce668	netif_skb_dev_features
 EXPORT_SYMBOL vmlinux 0x7e55df84	pcix_get_mmrbc
 EXPORT_SYMBOL vmlinux 0x7e58e1c4	neigh_lookup_nodev
 EXPORT_SYMBOL vmlinux 0x7e9c9ac4	pcie_port_service_unregister
@@ -9395,7 +9396,6 @@ EXPORT_SYMBOL vmlinux 0xd2dc4035	tcp_enter_memory_pressure
 EXPORT_SYMBOL vmlinux 0xd2e6a582	acpi_processor_preregister_performance
 EXPORT_SYMBOL vmlinux 0xd2e82dbb	mfd_cell_disable
 EXPORT_SYMBOL vmlinux 0xd30e926c	vfs_open
-EXPORT_SYMBOL vmlinux 0xd30ea93b	sync_inodes_sb
 EXPORT_SYMBOL vmlinux 0xd317527e	ps2_begin_command
 EXPORT_SYMBOL vmlinux 0xd35e249a	_raw_read_lock_irq
 EXPORT_SYMBOL vmlinux 0xd380d212	get_thermal_instance
@@ -9809,6 +9809,7 @@ EXPORT_SYMBOL vmlinux 0xed597524	qdisc_get_rtab
 EXPORT_SYMBOL vmlinux 0xed62417f	pci_request_regions
 EXPORT_SYMBOL vmlinux 0xed65f957	xfrm_sad_getinfo
 EXPORT_SYMBOL vmlinux 0xed678dc8	vm_insert_page
+EXPORT_SYMBOL vmlinux 0xed6df95d	sync_inodes_sb
 EXPORT_SYMBOL vmlinux 0xed7e1295	gen_pool_create
 EXPORT_SYMBOL vmlinux 0xed7e5e49	tty_free_termios
 EXPORT_SYMBOL vmlinux 0xed7ec75c	kmap_atomic_to_page
@@ -10153,7 +10154,6 @@ EXPORT_SYMBOL_GPL arch/x86/crypto/glue_helper 0xcb001a39	glue_xts_crypt_128bit
 EXPORT_SYMBOL_GPL arch/x86/crypto/glue_helper 0xfd0547e9	glue_ctr_crypt_final_128bit
 EXPORT_SYMBOL_GPL arch/x86/crypto/twofish-i586 0x28afd262	twofish_enc_blk
 EXPORT_SYMBOL_GPL arch/x86/crypto/twofish-i586 0x6f068d90	twofish_dec_blk
-EXPORT_SYMBOL_GPL arch/x86/kernel/microcode 0xdf66ca81	ucode_cpu_info
 EXPORT_SYMBOL_GPL arch/x86/kvm/kvm 0x00aaf935	kvm_disable_tdp
 EXPORT_SYMBOL_GPL arch/x86/kvm/kvm 0x07415e79	kvm_read_guest_virt
 EXPORT_SYMBOL_GPL arch/x86/kvm/kvm 0x08134f8e	kvm_set_cr4
@@ -11498,22 +11498,22 @@ EXPORT_SYMBOL_GPL drivers/net/can/c_can/c_can 0x51ee40c4	register_c_can_dev
 EXPORT_SYMBOL_GPL drivers/net/can/c_can/c_can 0xbe4aa4e3	free_c_can_dev
 EXPORT_SYMBOL_GPL drivers/net/can/c_can/c_can 0xd8073987	c_can_power_down
 EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x0fe19363	can_led_event
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x1ec9ea0d	free_candev
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x1a90da7d	alloc_candev
 EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x222c295a	can_len2dlc
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x2ca91551	can_get_echo_skb
 EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x3809e0be	devm_can_led_init
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x47fc3047	can_free_echo_skb
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x4e7db5c3	open_candev
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x60ab2039	alloc_candev
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x644a3694	unregister_candev
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x72783380	can_put_echo_skb
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x8680ab23	register_candev
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x8d44951f	close_candev
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x94fc69ca	alloc_can_err_skb
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x9fc9ab0b	safe_candev_priv
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x38e9b337	safe_candev_priv
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x3ad682c5	can_put_echo_skb
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x3c137767	can_free_echo_skb
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x6969782c	open_candev
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x777d6a69	close_candev
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0x839ce758	register_candev
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xa5eac9be	alloc_can_err_skb
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xb000ecf6	unregister_candev
 EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xb346573b	can_dlc2len
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xb512b2be	alloc_can_skb
-EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xdc1b3c12	can_bus_off
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xc217b66b	free_candev
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xce7a21e4	alloc_can_skb
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xe3e2ebf1	can_bus_off
+EXPORT_SYMBOL_GPL drivers/net/can/can-dev 0xf300ffc5	can_get_echo_skb
 EXPORT_SYMBOL_GPL drivers/net/can/cc770/cc770 0x1fa39cdd	alloc_cc770dev
 EXPORT_SYMBOL_GPL drivers/net/can/cc770/cc770 0xb21097e0	free_cc770dev
 EXPORT_SYMBOL_GPL drivers/net/can/cc770/cc770 0xc3e49aa3	register_cc770dev
@@ -15440,6 +15440,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x60528d5d	sata_scr_write
 EXPORT_SYMBOL_GPL vmlinux 0x6053c967	raw_seq_open
 EXPORT_SYMBOL_GPL vmlinux 0x606084b6	rio_route_get_entry
 EXPORT_SYMBOL_GPL vmlinux 0x608c30f9	inet_unhash
+EXPORT_SYMBOL_GPL vmlinux 0x60930d37	save_mc_for_early
 EXPORT_SYMBOL_GPL vmlinux 0x6094685f	wm8997_irq
 EXPORT_SYMBOL_GPL vmlinux 0x60a13e90	rcu_barrier
 EXPORT_SYMBOL_GPL vmlinux 0x60ac7b9f	dev_get_gen_pool
@@ -15547,6 +15548,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x687934e9	gpiod_set_raw_value
 EXPORT_SYMBOL_GPL vmlinux 0x68915fd0	acpi_pci_check_ejectable
 EXPORT_SYMBOL_GPL vmlinux 0x68956406	static_key_slow_dec
 EXPORT_SYMBOL_GPL vmlinux 0x68a44792	regmap_register_patch
+EXPORT_SYMBOL_GPL vmlinux 0x68ac3e26	skb_gso_transport_seglen
 EXPORT_SYMBOL_GPL vmlinux 0x68ac9717	pci_user_write_config_word
 EXPORT_SYMBOL_GPL vmlinux 0x68dfc1d4	devm_kmalloc
 EXPORT_SYMBOL_GPL vmlinux 0x6923ce63	irq_work_sync
@@ -17074,6 +17076,7 @@ EXPORT_SYMBOL_GPL vmlinux 0xdf2a4bad	unregister_pernet_subsys
 EXPORT_SYMBOL_GPL vmlinux 0xdf2af64c	alarm_forward
 EXPORT_SYMBOL_GPL vmlinux 0xdf3735c1	iommu_detach_device
 EXPORT_SYMBOL_GPL vmlinux 0xdf39a116	da9055_regmap_config
+EXPORT_SYMBOL_GPL vmlinux 0xdf66ca81	ucode_cpu_info
 EXPORT_SYMBOL_GPL vmlinux 0xdf734be7	pwm_free
 EXPORT_SYMBOL_GPL vmlinux 0xdf9fa04b	agp_remove_bridge
 EXPORT_SYMBOL_GPL vmlinux 0xdfa1fd06	klist_iter_init_node
