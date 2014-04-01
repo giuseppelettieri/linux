@@ -2394,6 +2394,12 @@ tea
 tea575x
 tea5761
 tea5767
+team
+team_mode_activebackup
+team_mode_broadcast
+team_mode_loadbalance
+team_mode_random
+team_mode_roundrobin
 tef6862
 tekram-sir
 test-kprobes

@@ -1454,6 +1454,7 @@ i82875p_edac
 i82975x_edac
 i8k
 i915
+i915_bdw
 ib700wdt
 ib_addr
 ib_cm
@@ -2530,9 +2531,6 @@ pc87360
 pc8736x_gpio
 pc87413_wdt
 pc87427
-pcap_keys
-pcap-regulator
-pcap_ts
 pcbc
 pcbit
 pcd
@@ -2943,7 +2941,6 @@ rtc-moxart
 rtc-mrst
 rtc-msm6242
 rtc-palmas
-rtc-pcap
 rtc-pcf2123
 rtc-pcf2127
 rtc-pcf50633
@@ -3584,6 +3581,12 @@ tea5761
 tea5767
 tea6415c
 tea6420
+team
+team_mode_activebackup
+team_mode_broadcast
+team_mode_loadbalance
+team_mode_random
+team_mode_roundrobin
 tef6862
 tehuti
 tekram-sir

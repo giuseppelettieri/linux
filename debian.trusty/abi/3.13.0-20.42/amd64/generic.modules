@@ -1419,6 +1419,7 @@ i82092
 i82975x_edac
 i8k
 i915
+i915_bdw
 ib700wdt
 ib_addr
 ib_cm
@@ -3438,6 +3439,12 @@ tea5761
 tea5767
 tea6415c
 tea6420
+team
+team_mode_activebackup
+team_mode_broadcast
+team_mode_loadbalance
+team_mode_random
+team_mode_roundrobin
 tef6862
 tehuti
 tekram-sir

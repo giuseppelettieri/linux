@@ -1,4 +1,66 @@
-linux-lts-trusty (3.13.0-20.41~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-21.43~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * SAUCE: kvm: BIOS disabled kvm support should be a warning
+    - LP: #1300247
+  * SAUCE: nouveau: missing outputs should be warnings
+    - LP: #1300244
+
+  [ John Johansen ]
+
+  * Revert "SAUCE: Add config option to disable new apparmor 3 semantics"
+  * Revert "SAUCE: apparmor: fix uninitialized lsm_audit membe"
+  * Revert "SAUCE: (no-up) apparmor: Fix tasks not subject to, reloaded
+    policy"
+  * Revert "SAUCE: apparmor: allocate path lookup buffers during init"
+  * Revert "SAUCE: apparmor: fix unix domain sockets to be mediated on
+    connection"
+  * Revert "SAUCE: (no-up) apparmor: Sync to apparmor 3 - alpha 4 snapshot"
+  * SAUCE: (no-up) apparmor: Sync to apparmor3 - alpha6 snapshot
+    - LP: #1298611
+
+  [ Tetsuo Handa ]
+
+  * SAUCE: kthread: Do not leave kthread_create() immediately upon SIGKILL.
+
+  [ Tim Gardner ]
+
+  * Release Tracking Bug
+    - LP: #1300412
+  * [Config] updateconfigs after AA patch set
+  * [Config] CONFIG_ZSWAP=n, CONFIG_ZBUD=n for all arches
+  * [Config] CONFIG_XILINX_LL_TEMAC=m for powerpc
+  * [Config] CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y for ppc64el
+  * [Config] CONFIG_WLAN=y for arm64
+  * [Config] CONFIG_VORTEX=m for ppc64el
+  * [Config] CONFIG_WIMAX=m for ppc64el
+  * [Config] CONFIG_WATCHDOG=y for ppc64el
+  * [Config] CONFIG_VME_BUS=m for ppc64el
+  * [Config] CONFIG_VIRT_DRIVERS=y for ppc64el
+  * [Config] CONFIG_VIDEO_OUTPUT_CONTROL=m for ppc64el
+  * [Config] CONFIG_VERSION_SIGNATURE="" for powerpc64-emb
+  * [Config] CONFIG_UWB=m for ppc64el
+
+  [ Upstream Kernel Changes ]
+
+  * vhost: validate vhost_get_vq_desc return value
+    - CVE-2014-0055
+  * net: use kfree_skb_list() helper
+  * skbuff: skb_segment: s/frag/nskb_frag/
+  * skbuff: skb_segment: s/skb_frag/frag/
+  * skbuff: skb_segment: s/skb/head_skb/
+  * skbuff: skb_segment: s/fskb/list_skb/
+  * skbuff: skb_segment: orphan frags before copying
+    - CVE-2014-0131
+
+  [ Upstream Kernel Changes ]
+
+  * rebase to v3.13.8
+
+ -- Tim Gardner <tim.gardner@canonical.com>  Mon, 31 Mar 2014 12:38:11 -0600
+
+linux (3.13.0-20.42) trusty; urgency=low
 
   [ Adam Conrad ]
 
@@ -13,6 +75,7 @@ linux-lts-trusty (3.13.0-20.41~precise1) precise; urgency=low
   * cloud-tools -- update IF_NAME to DEVICE in hv_* scripts
     - LP: #1295401
   * [Config] cloud-tools -- ensure we force older hv-kvp-daemon-init off
+  * [Config] fix up Breaks/Replaces on linux-cloud-tools-common to fix upgrades
 
   [ Emmanuel Grumbach ]
 
