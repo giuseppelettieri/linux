@@ -444,6 +444,7 @@ bt819
 bt856
 bt866
 bt878
+btcoexist
 btcx-risc
 btmrvl
 btmrvl_sdio
@@ -3615,6 +3616,7 @@ usb_wwan
 u_serial
 userspace-consumer
 ushc
+usnic_verbs
 uss720
 uvcvideo
 uvesafb

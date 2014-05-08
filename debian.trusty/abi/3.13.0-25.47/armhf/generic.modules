@@ -400,6 +400,7 @@ bridge
 broadsheetfb
 bsd_comp
 bt878
+btcoexist
 btcx-risc
 btmrvl
 btmrvl_sdio
@@ -1856,6 +1857,8 @@ mkiss
 mlx4_core
 mlx4_en
 mlx4_ib
+mlx5_core
+mlx5_ib
 mma8450
 mms114
 mos7720

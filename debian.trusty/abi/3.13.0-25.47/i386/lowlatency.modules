@@ -462,6 +462,7 @@ bt819
 bt856
 bt866
 bt878
+btcoexist
 btcx-risc
 btmrvl
 btmrvl_sdio
@@ -1446,7 +1447,6 @@ i6300esb
 i7300_edac
 i740fb
 i7core_edac
-i810
 i810fb
 i82092
 i82365
@@ -3760,6 +3760,7 @@ usb_wwan
 u_serial
 userspace-consumer
 ushc
+usnic_verbs
 uss720
 uvcvideo
 uvesafb
