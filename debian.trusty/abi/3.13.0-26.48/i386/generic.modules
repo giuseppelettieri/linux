@@ -2936,6 +2936,8 @@ rtl8192cu
 rtl8192de
 rtl8192se
 rtl8723ae
+rtl8723be
+rtl8723-common
 rtl8821ae
 rtllib
 rtllib_crypt_ccmp

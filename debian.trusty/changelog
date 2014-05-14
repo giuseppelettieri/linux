@@ -1,4 +1,16 @@
-linux-lts-trusty (3.13.0-26.48~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-27.49~precise1) precise; urgency=low
+
+  [ Brad Figg ]
+
+  * Revert "SAUCE: (no-up) HID: rmi: do not stop the device at the end of
+    probe"
+  * Revert "SAUCE: (no-up) HID: rmi: introduce RMI driver for Synaptics
+    touchpads"
+  * Revert "[Config] CONFIG_HID_RMI=m"
+
+ -- Brad Figg <brad.figg@canonical.com>  Wed, 14 May 2014 10:29:07 -0700
+
+linux (3.13.0-26.48) trusty; urgency=low
 
   [ Benjamin Tissoires ]
 
@@ -13,7 +25,7 @@ linux-lts-trusty (3.13.0-26.48~precise1) precise; urgency=low
   * Revert "n_tty: Fix n_tty_write crash when echoing in raw mode"
     - LP: #1314762
   * Release Tracking Bug
-    - LP: #1317590
+    - LP: #1316835
 
   [ Tim Gardner ]
 
@@ -52,7 +64,7 @@ linux-lts-trusty (3.13.0-26.48~precise1) precise; urgency=low
     - LP: #1316735
     - CVE-2014-1738
 
- -- Joseph Salisbury <joseph.salisbury@canonical.com>  Thu, 08 May 2014 15:39:43 -0400
+ -- Kamal Mostafa <kamal@canonical.com>  Tue, 06 May 2014 15:30:29 -0700
 
 linux (3.13.0-25.47) trusty; urgency=low
 

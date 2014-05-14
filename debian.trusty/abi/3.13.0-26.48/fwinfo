@@ -608,6 +608,7 @@ firmware:       rtlwifi/rtl8192cufw_TMSC.bin
 firmware:       rtlwifi/rtl8192defw.bin
 firmware:       rtlwifi/rtl8192sefw.bin
 firmware:       rtlwifi/rtl8712u.bin
+firmware:       rtlwifi/rtl8723befw.bin
 firmware:       rtlwifi/rtl8723fw_B.bin
 firmware:       rtlwifi/rtl8723fw.bin
 firmware:       rtlwifi/rtl8821aefw.bin
