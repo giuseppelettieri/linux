@@ -1,4 +1,17 @@
-linux-lts-trusty (3.13.0-27.49~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-27.50~precise1) precise; urgency=low
+
+  [ Brad Figg ]
+
+  * Revert "rtlwifi: Set the link state"
+
+  [ Kamal Mostafa ]
+
+  * Release Tracking Bug
+    - re-used previous tracking bug
+
+ -- Kamal Mostafa <kamal@canonical.com>  Fri, 16 May 2014 11:59:18 -0700
+
+linux (3.13.0-27.49) trusty; urgency=low
 
   [ Brad Figg ]
 
@@ -25,7 +38,7 @@ linux (3.13.0-26.48) trusty; urgency=low
   * Revert "n_tty: Fix n_tty_write crash when echoing in raw mode"
     - LP: #1314762
   * Release Tracking Bug
-    - LP: #1316835
+    - LP: #1317590
 
   [ Tim Gardner ]
 
