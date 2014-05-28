@@ -1,4 +1,24 @@
-linux-lts-trusty (3.13.0-28.51~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-29.52~precise1) precise; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - re-used previous tracking bug
+
+  [ Adam Conrad ]
+
+  * [Config] Normalize AHCI configs on powerpc/ppc64el with the rest of the
+    architectures
+    - LP: #1323980
+
+  [ Tanmay Inamdar ]
+
+  * SAUCE: Add MSI/MSI-X driver for APM PCI bus
+    - LP: #1318977
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 28 May 2014 09:38:41 +0100
+
+linux (3.13.0-28.51) trusty; urgency=low
 
   [ Luis Henriques ]
 
