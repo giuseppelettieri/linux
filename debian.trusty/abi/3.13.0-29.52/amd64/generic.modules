@@ -1325,6 +1325,7 @@ hpilo
 hpsa
 hptiop
 hpwdt
+hp-wireless
 hp-wmi
 hsi
 hsi_char
@@ -1415,6 +1416,7 @@ i7300_edac
 i7300_idle
 i740fb
 i7core_edac
+i810
 i82092
 i82975x_edac
 i8k

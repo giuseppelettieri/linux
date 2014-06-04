@@ -1,4 +1,24 @@
-linux-lts-trusty (3.13.0-29.52~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-29.53~precise1) precise; urgency=low
+
+  [ Upstream Kernel Changes ]
+
+  * futex-prevent-requeue-pi-on-same-futex.patch futex: Forbid uaddr ==
+    uaddr2 in futex_requeue(..., requeue_pi=1)
+    - LP: #1326367
+    - CVE-2014-3153
+  * futex: Validate atomic acquisition in futex_lock_pi_atomic()
+    - LP: #1326367
+    - CVE-2014-3153
+  * futex: Always cleanup owner tid in unlock_pi
+    - LP: #1326367
+    - CVE-2014-3153
+  * futex: Make lookup_pi_state more robust
+    - LP: #1326367
+    - CVE-2014-3153
+
+ -- Brad Figg <brad.figg@canonical.com>  Wed, 04 Jun 2014 08:25:41 -0700
+
+linux (3.13.0-29.52) trusty; urgency=low
 
   [ Luis Henriques ]
 
@@ -23,7 +43,7 @@ linux (3.13.0-28.51) trusty; urgency=low
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1323190
+    - LP: #1322112
 
   [ Adam Lee ]
 
@@ -408,7 +428,7 @@ linux (3.13.0-26.48) trusty; urgency=low
   * Revert "n_tty: Fix n_tty_write crash when echoing in raw mode"
     - LP: #1314762
   * Release Tracking Bug
-    - LP: #1317590
+    - LP: #1316835
 
   [ Tim Gardner ]
 

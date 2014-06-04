@@ -8663,8 +8663,8 @@ EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x2f40da68	dm_bm
 EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x2f74609d	dm_bitset_test_bit
 EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x32b5f546	dm_array_empty
 EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x33c03da6	dm_sm_disk_open
-EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x371fd72c	dm_bm_flush_and_unlock
 EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x38c75c44	dm_bitset_empty
+EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x3ad0f55b	dm_bm_flush
 EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x40f7bd91	dm_tm_inc
 EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x5e6aea80	dm_btree_walk
 EXPORT_SYMBOL_GPL drivers/md/persistent-data/dm-persistent-data 0x619701dc	dm_sm_disk_create
@@ -10849,6 +10849,7 @@ EXPORT_SYMBOL_GPL net/sunrpc/sunrpc 0xedcf6be4	qword_add
 EXPORT_SYMBOL_GPL net/sunrpc/sunrpc 0xedf91730	svc_xprt_copy_addrs
 EXPORT_SYMBOL_GPL net/sunrpc/sunrpc 0xeeacab69	rpc_update_rtt
 EXPORT_SYMBOL_GPL net/sunrpc/sunrpc 0xef0a96fe	svc_set_num_threads
+EXPORT_SYMBOL_GPL net/sunrpc/sunrpc 0xf1846f42	svc_alien_sock
 EXPORT_SYMBOL_GPL net/sunrpc/sunrpc 0xf2117796	xprt_alloc
 EXPORT_SYMBOL_GPL net/sunrpc/sunrpc 0xf2c71ef5	svc_sock_update_bufs
 EXPORT_SYMBOL_GPL net/sunrpc/sunrpc 0xf6db9bc1	rpc_queue_upcall
