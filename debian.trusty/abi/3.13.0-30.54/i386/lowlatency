@@ -117,6 +117,7 @@ EXPORT_SYMBOL drivers/gpu/drm/drm 0x0e1c5fa9	drm_mode_config_cleanup
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x0ec527fc	drm_flip_work_commit
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x0fccafb1	drm_global_item_unref
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x0fd60df2	drm_get_connector_status_name
+EXPORT_SYMBOL drivers/gpu/drm/drm 0x107742a9	drm_get_subpixel_order_name
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x10b7f167	drm_mode_parse_command_line_for_connector
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x10d42dde	drm_vblank_get
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x117ad6b2	drm_calc_vbltimestamp_from_scanoutpos
@@ -372,6 +373,7 @@ EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x163251c8	drm_dp_link_train_channe
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x1719cf91	drm_kms_helper_poll_enable
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x1785aa47	drm_fb_helper_set_par
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x1b5d143e	drm_fb_helper_check_var
+EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x1ca6b5d6	drm_pick_cmdline_mode
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x2dce6400	drm_fb_helper_blank
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x3344e05c	drm_fb_helper_restore_fbdev_mode
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x34871adf	drm_dp_channel_eq_ok
@@ -388,6 +390,7 @@ EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x8576e70e	drm_helper_connector_dpm
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x89be9276	drm_fb_helper_init
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x89cc0ec4	drm_fb_helper_pan_display
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x90b6e04c	drm_helper_crtc_in_use
+EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x942aa038	drm_has_preferred_mode
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xa15ab37d	drm_helper_resume_force_mode
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xa5f0ac0a	drm_fb_helper_debug_leave
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xa77858bb	drm_dp_get_adjust_request_voltage
@@ -5247,20 +5250,20 @@ EXPORT_SYMBOL net/mac802154/mac802154 0xb4b844c7	ieee802154_register_device
 EXPORT_SYMBOL net/mac802154/mac802154 0xbf0a9e3e	ieee802154_unregister_device
 EXPORT_SYMBOL net/mac802154/mac802154 0xd93f6d6c	ieee802154_free_device
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x0f615ea0	ip_vs_scheduler_err
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x14fba632	ip_vs_conn_out_get
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x1d9d10cf	register_ip_vs_scheduler
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x28861da3	ip_vs_proto_data_get
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x342139d8	ip_vs_conn_put
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x3e559838	ip_vs_conn_out_get
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x33b30469	ip_vs_conn_in_get
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x3f2c0f2c	register_ip_vs_app_inc
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x50f75ce0	ip_vs_tcp_conn_listen
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x6d533ba6	register_ip_vs_app
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x6e959568	ip_vs_conn_new
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x8d604db9	ip_vs_nfct_expect_related
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x960a31a2	unregister_ip_vs_app
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x972a2e8b	ip_vs_proto_get
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xc19f1771	unregister_ip_vs_scheduler
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xa5bb8188	ip_vs_conn_new
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xc1c8060e	unregister_ip_vs_scheduler
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xd831a1a2	ip_vs_proto_name
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xf0690b22	register_ip_vs_scheduler
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xf2a69a92	ip_vs_conn_in_get
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xf2cf40b0	ip_vs_tcp_conn_listen
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xe3b5e131	ip_vs_conn_put
 EXPORT_SYMBOL net/netfilter/nf_conntrack 0x40dd02e4	nf_conntrack_untracked
 EXPORT_SYMBOL net/netfilter/nf_conntrack 0xa11a90fd	__nf_ct_ext_destroy
 EXPORT_SYMBOL net/netfilter/nf_conntrack 0xa2f2adf7	__nf_ct_ext_add_length
@@ -6966,6 +6969,7 @@ EXPORT_SYMBOL vmlinux 0x3ef36191	tcp_seq_open
 EXPORT_SYMBOL vmlinux 0x3ef78d80	vm_get_page_prot
 EXPORT_SYMBOL vmlinux 0x3eff5ac2	intel_scu_ipc_writev
 EXPORT_SYMBOL vmlinux 0x3f0546a8	ioread32_rep
+EXPORT_SYMBOL vmlinux 0x3f31de79	pci_enable_msix_range
 EXPORT_SYMBOL vmlinux 0x3f3b5e3a	dev_uc_sync
 EXPORT_SYMBOL vmlinux 0x3f43f096	init_special_inode
 EXPORT_SYMBOL vmlinux 0x3f453d11	tcp_gro_receive
@@ -7133,6 +7137,7 @@ EXPORT_SYMBOL vmlinux 0x485290c4	phy_connect
 EXPORT_SYMBOL vmlinux 0x4859b8bb	rtc_year_days
 EXPORT_SYMBOL vmlinux 0x486d2f29	dqstats
 EXPORT_SYMBOL vmlinux 0x48846c32	mdiobus_unregister
+EXPORT_SYMBOL vmlinux 0x4889e6b5	__skb_get_hash
 EXPORT_SYMBOL vmlinux 0x48931fa5	devm_request_and_ioremap
 EXPORT_SYMBOL vmlinux 0x489de0f6	km_report
 EXPORT_SYMBOL vmlinux 0x48d6a399	lro_receive_frags
@@ -7961,6 +7966,7 @@ EXPORT_SYMBOL vmlinux 0x7a4497db	kzfree
 EXPORT_SYMBOL vmlinux 0x7a47195e	mmc_power_restore_host
 EXPORT_SYMBOL vmlinux 0x7a51e313	devm_clk_put
 EXPORT_SYMBOL vmlinux 0x7a5411e3	get_phy_device
+EXPORT_SYMBOL vmlinux 0x7a699944	pci_enable_msi_range
 EXPORT_SYMBOL vmlinux 0x7a81ee81	netdev_master_upper_dev_get_rcu
 EXPORT_SYMBOL vmlinux 0x7a82cb47	rdmsrl_safe_on_cpu
 EXPORT_SYMBOL vmlinux 0x7a91726b	clkdev_alloc
@@ -8375,7 +8381,6 @@ EXPORT_SYMBOL vmlinux 0x94a2a363	pcim_iounmap_regions
 EXPORT_SYMBOL vmlinux 0x94a9e398	pci_disable_msix
 EXPORT_SYMBOL vmlinux 0x94afdddf	uart_unregister_driver
 EXPORT_SYMBOL vmlinux 0x94b541b5	cpu_active_mask
-EXPORT_SYMBOL vmlinux 0x94d857a0	__skb_get_rxhash
 EXPORT_SYMBOL vmlinux 0x94dbdab4	misc_deregister
 EXPORT_SYMBOL vmlinux 0x9508f166	param_ops_bint
 EXPORT_SYMBOL vmlinux 0x9514393e	pcie_capability_write_dword
@@ -14179,7 +14184,9 @@ EXPORT_SYMBOL_GPL sound/soc/snd-soc-core 0xfad7b6eb	dapm_mark_dirty
 EXPORT_SYMBOL_GPL sound/soc/snd-soc-core 0xfdc3ff09	snd_soc_put_volsw
 EXPORT_SYMBOL_GPL sound/soc/snd-soc-core 0xfeaa64be	snd_soc_get_volsw_range
 EXPORT_SYMBOL_GPL ubuntu/i915/i915_bdw 0x118a3f6e	i915_bdw_gpu_busy
+EXPORT_SYMBOL_GPL ubuntu/i915/i915_bdw 0x34af3be3	i915_bdw_release_power_well
 EXPORT_SYMBOL_GPL ubuntu/i915/i915_bdw 0x7381c75a	i915_bdw_read_mch_val
+EXPORT_SYMBOL_GPL ubuntu/i915/i915_bdw 0x8993eade	i915_bdw_request_power_well
 EXPORT_SYMBOL_GPL ubuntu/i915/i915_bdw 0x96d7119d	i915_bdw_gpu_raise
 EXPORT_SYMBOL_GPL ubuntu/i915/i915_bdw 0xa17bc3aa	i915_bdw_gpu_turbo_disable
 EXPORT_SYMBOL_GPL ubuntu/i915/i915_bdw 0xde54f019	i915_bdw_gpu_lower

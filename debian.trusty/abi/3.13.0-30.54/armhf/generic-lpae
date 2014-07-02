@@ -77,6 +77,7 @@ EXPORT_SYMBOL drivers/gpu/drm/drm 0x0f091295	drm_pci_free
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x0fccafb1	drm_global_item_unref
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x0fd60df2	drm_get_connector_status_name
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x0ff97eb9	drm_gem_vm_close
+EXPORT_SYMBOL drivers/gpu/drm/drm 0x107742a9	drm_get_subpixel_order_name
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x118f9bdf	drm_warn_on_modeset_not_all_locked
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x12c6276a	drm_buffer_read_object
 EXPORT_SYMBOL drivers/gpu/drm/drm 0x13cdaadb	drm_flip_work_init
@@ -323,6 +324,7 @@ EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x471c750b	drm_kms_helper_poll_enab
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x5188e9e1	drm_crtc_helper_set_config
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x52e71a7b	drm_fb_helper_fill_var
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x609bca85	drm_kms_helper_poll_fini
+EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x621c3201	drm_has_preferred_mode
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x66e9ced3	drm_fb_helper_debug_leave
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x6afb8eb5	drm_helper_probe_single_connector_modes
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0x6e19801f	drm_helper_resume_force_mode
@@ -342,6 +344,7 @@ EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xd9ac751c	drm_fb_helper_check_var
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xda76eb89	drm_kms_helper_poll_disable
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xdc4c703f	drm_helper_move_panel_connectors_to_head
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xdd489d64	drm_helper_crtc_in_use
+EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xe86d720a	drm_pick_cmdline_mode
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xf166211f	drm_fb_helper_fini
 EXPORT_SYMBOL drivers/gpu/drm/drm_kms_helper 0xfc8a61e3	drm_fb_helper_single_add_all_connectors
 EXPORT_SYMBOL drivers/gpu/drm/drm_usb 0x52bd7dcb	drm_get_usb_dev
@@ -3913,20 +3916,20 @@ EXPORT_SYMBOL net/mac802154/mac802154 0x93fb4536	ieee802154_free_device
 EXPORT_SYMBOL net/mac802154/mac802154 0xa7e6eb42	ieee802154_register_device
 EXPORT_SYMBOL net/mac802154/mac802154 0xbd577fb7	ieee802154_alloc_device
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x02d2090d	unregister_ip_vs_app
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x07085c38	ip_vs_tcp_conn_listen
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x14b474a4	unregister_ip_vs_scheduler
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x14811df8	ip_vs_conn_in_get
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x3f2b5e68	register_ip_vs_scheduler
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x436dd4fb	ip_vs_conn_new
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x8412ef0f	ip_vs_proto_get
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x9939ccdd	register_ip_vs_scheduler
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x93d437f9	ip_vs_conn_out_get
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x9c17465d	ip_vs_nfct_expect_related
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0x9e28e061	ip_vs_conn_put
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xa5af55a9	ip_vs_scheduler_err
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xa9e53b5e	ip_vs_conn_new
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xb65d7f43	ip_vs_conn_out_get
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xbdce6989	ip_vs_tcp_conn_listen
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xcbd0c7f2	register_ip_vs_app
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xd803acce	ip_vs_conn_put
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xd831a1a2	ip_vs_proto_name
+EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xde7a0618	unregister_ip_vs_scheduler
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xeb513c77	ip_vs_proto_data_get
 EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xf080a556	register_ip_vs_app_inc
-EXPORT_SYMBOL net/netfilter/ipvs/ip_vs 0xf21b074a	ip_vs_conn_in_get
 EXPORT_SYMBOL net/netfilter/nf_conntrack 0x2d69df9c	nf_conntrack_untracked
 EXPORT_SYMBOL net/netfilter/nf_conntrack 0xa6050078	__nf_ct_ext_add_length
 EXPORT_SYMBOL net/netfilter/nf_conntrack 0xbd188701	__nf_ct_ext_destroy
@@ -7220,7 +7223,6 @@ EXPORT_SYMBOL vmlinux 0xc075342e	__secpath_destroy
 EXPORT_SYMBOL vmlinux 0xc0763484	rfkill_blocked
 EXPORT_SYMBOL vmlinux 0xc07dcb78	of_mm_gpiochip_add
 EXPORT_SYMBOL vmlinux 0xc0823e4c	twl_i2c_write
-EXPORT_SYMBOL vmlinux 0xc0a533e0	__skb_get_rxhash
 EXPORT_SYMBOL vmlinux 0xc0a98385	profile_pc
 EXPORT_SYMBOL vmlinux 0xc0aff7ae	inode_add_rsv_space
 EXPORT_SYMBOL vmlinux 0xc0bd3ab9	wait_on_sync_kiocb
@@ -7893,6 +7895,7 @@ EXPORT_SYMBOL vmlinux 0xef205b26	key_revoke
 EXPORT_SYMBOL vmlinux 0xef278c76	ip6_route_output
 EXPORT_SYMBOL vmlinux 0xef29f1ed	nand_bch_init
 EXPORT_SYMBOL vmlinux 0xef42b06c	block_write_begin
+EXPORT_SYMBOL vmlinux 0xef4bdafc	__skb_get_hash
 EXPORT_SYMBOL vmlinux 0xef68d1e6	make_bad_inode
 EXPORT_SYMBOL vmlinux 0xef6a90f0	__frontswap_test
 EXPORT_SYMBOL vmlinux 0xef7efc90	jbd2__journal_restart
