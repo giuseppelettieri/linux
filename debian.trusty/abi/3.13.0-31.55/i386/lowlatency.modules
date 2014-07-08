@@ -1297,6 +1297,7 @@ hid-picolcd
 hid-pl
 hid-primax
 hid-prodikeys
+hid-rmi
 hid-roccat
 hid-roccat-arvo
 hid-roccat-common
@@ -1449,7 +1450,6 @@ i6300esb
 i7300_edac
 i740fb
 i7core_edac
-i810
 i810fb
 i82092
 i82365

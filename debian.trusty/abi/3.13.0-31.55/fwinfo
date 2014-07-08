@@ -303,6 +303,7 @@ firmware:       iwlwifi-6000g2a-5.ucode
 firmware:       iwlwifi-6000g2b-6.ucode
 firmware:       iwlwifi-6050-5.ucode
 firmware:       iwlwifi-7260-7.ucode
+firmware:       iwlwifi-7265-7.ucode
 firmware:       kaweth/new_code.bin
 firmware:       kaweth/new_code_fix.bin
 firmware:       kaweth/trigger_code.bin
@@ -435,6 +436,7 @@ firmware:       radeon/BARTS_me.bin
 firmware:       radeon/BARTS_pfp.bin
 firmware:       radeon/BARTS_smc.bin
 firmware:       radeon/BONAIRE_ce.bin
+firmware:       radeon/BONAIRE_mc2.bin
 firmware:       radeon/BONAIRE_mc.bin
 firmware:       radeon/BONAIRE_me.bin
 firmware:       radeon/BONAIRE_mec.bin
@@ -463,12 +465,14 @@ firmware:       radeon/CYPRESS_rlc.bin
 firmware:       radeon/CYPRESS_smc.bin
 firmware:       radeon/CYPRESS_uvd.bin
 firmware:       radeon/HAINAN_ce.bin
+firmware:       radeon/HAINAN_mc2.bin
 firmware:       radeon/HAINAN_mc.bin
 firmware:       radeon/HAINAN_me.bin
 firmware:       radeon/HAINAN_pfp.bin
 firmware:       radeon/HAINAN_rlc.bin
 firmware:       radeon/HAINAN_smc.bin
 firmware:       radeon/HAWAII_ce.bin
+firmware:       radeon/HAWAII_mc2.bin
 firmware:       radeon/HAWAII_mc.bin
 firmware:       radeon/HAWAII_me.bin
 firmware:       radeon/HAWAII_mec.bin
@@ -493,6 +497,7 @@ firmware:       radeon/KAVERI_pfp.bin
 firmware:       radeon/KAVERI_rlc.bin
 firmware:       radeon/KAVERI_sdma.bin
 firmware:       radeon/OLAND_ce.bin
+firmware:       radeon/OLAND_mc2.bin
 firmware:       radeon/OLAND_mc.bin
 firmware:       radeon/OLAND_me.bin
 firmware:       radeon/OLAND_pfp.bin
@@ -501,6 +506,7 @@ firmware:       radeon/OLAND_smc.bin
 firmware:       radeon/PALM_me.bin
 firmware:       radeon/PALM_pfp.bin
 firmware:       radeon/PITCAIRN_ce.bin
+firmware:       radeon/PITCAIRN_mc2.bin
 firmware:       radeon/PITCAIRN_mc.bin
 firmware:       radeon/PITCAIRN_me.bin
 firmware:       radeon/PITCAIRN_pfp.bin
@@ -551,6 +557,7 @@ firmware:       radeon/SUMO_pfp.bin
 firmware:       radeon/SUMO_rlc.bin
 firmware:       radeon/SUMO_uvd.bin
 firmware:       radeon/TAHITI_ce.bin
+firmware:       radeon/TAHITI_mc2.bin
 firmware:       radeon/TAHITI_mc.bin
 firmware:       radeon/TAHITI_me.bin
 firmware:       radeon/TAHITI_pfp.bin
@@ -562,6 +569,7 @@ firmware:       radeon/TURKS_me.bin
 firmware:       radeon/TURKS_pfp.bin
 firmware:       radeon/TURKS_smc.bin
 firmware:       radeon/VERDE_ce.bin
+firmware:       radeon/VERDE_mc2.bin
 firmware:       radeon/VERDE_mc.bin
 firmware:       radeon/VERDE_me.bin
 firmware:       radeon/VERDE_pfp.bin
