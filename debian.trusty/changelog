@@ -1,4 +1,14 @@
-linux-lts-trusty (3.13.0-32.56~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-32.57~precise1) precise; urgency=low
+
+  [ Upstream Kernel Changes ]
+
+  * l2tp: Privilege escalation in ppp over l2tp sockets
+    - LP: #1341472
+    - CVE-2014-4943
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Mon, 14 Jul 2014 11:48:23 +0100
+
+linux (3.13.0-32.56) trusty; urgency=low
 
   [ Luis Henriques ]
 
@@ -6,7 +16,7 @@ linux-lts-trusty (3.13.0-32.56~precise1) precise; urgency=low
   * Revert "x86_64,ptrace: Enforce RIP <= TASK_SIZE_MAX (CVE-2014-4699)"
     - LP: #1337339
   * Release Tracking Bug
-    - LP: #1338705
+    - LP: #1338524
 
   [ Upstream Kernel Changes ]
 
@@ -16,7 +26,7 @@ linux-lts-trusty (3.13.0-32.56~precise1) precise; urgency=low
   * hpsa: add new Smart Array PCI IDs (May 2014)
     - LP: #1337516
 
- -- Luis Henriques <luis.henriques@canonical.com>  Tue, 08 Jul 2014 11:18:46 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Mon, 07 Jul 2014 11:38:37 +0100
 
 linux (3.13.0-31.55) trusty; urgency=low
 
