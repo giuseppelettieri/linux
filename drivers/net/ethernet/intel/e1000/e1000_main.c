@@ -513,6 +513,9 @@ static int e1000_configure_csb(struct e1000_adapter * adapter)
 		adapter->csb_phyaddr = virt_to_phys(adapter->csb);
 		adapter->csb_mode = adapter->csb->guest_csb_on;
 
+#ifdef DEV_NETMAP
+		if (!e1000_netmap_on(adapter))
+#endif
 		if (adapter->csb_mode) {
 			/* We change the rx buffer size so that we are able to receive a maximum
 			   sized GSO packet. */
