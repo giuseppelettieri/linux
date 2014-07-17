@@ -3116,6 +3116,7 @@ struct e1000_host_command_info {
 #define E1000_PARAVIRT_SUBDEV 0x1101
 #if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
 #include "paravirt.h"
+#define NETMAP_E1000_PARAVIRT
 #else
 #include <linux/net_paravirt.h>
 #endif
