@@ -1,4 +1,24 @@
-linux-lts-trusty (3.13.0-32.57~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-33.58~precise1) precise; urgency=low
+
+  [ Brad Figg ]
+
+  * Release Tracking Bug
+    - LP: #1350553
+
+  [ Upstream Kernel Changes ]
+
+  * mm: numa: do not automatically migrate KSM pages
+    - LP: #1346917
+  * net: fix UDP tunnel GSO of frag_list GRO packets
+    - LP: #1331219
+  * auditsc: audit_krule mask accesses need bounds checking
+    - LP: #1347088
+  * n_tty: Fix buffer overruns with larger-than-4k pastes
+    - LP: #1208740
+
+ -- Brad Figg <brad.figg@canonical.com>  Wed, 30 Jul 2014 14:19:08 -0700
+
+linux (3.13.0-32.57) trusty; urgency=low
 
   [ Upstream Kernel Changes ]
 
@@ -6,7 +26,7 @@ linux-lts-trusty (3.13.0-32.57~precise1) precise; urgency=low
     - LP: #1341472
     - CVE-2014-4943
 
- -- Luis Henriques <luis.henriques@canonical.com>  Mon, 14 Jul 2014 11:48:23 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Mon, 14 Jul 2014 10:03:44 +0100
 
 linux (3.13.0-32.56) trusty; urgency=low
 
