@@ -1,9 +1,31 @@
-linux-lts-trusty (3.13.0-33.58~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-34.60~precise1) precise; urgency=low
 
   [ Brad Figg ]
 
   * Release Tracking Bug
-    - LP: #1350553
+    - LP: #1356396
+
+  [ Upstream Kernel Changes ]
+
+  * mnt: Only change user settable mount flags in remount
+    - CVE-2014-5206
+  * mnt: Move the test for MNT_LOCK_READONLY from change_mount_flags into
+    do_remount
+    - CVE-2014-5206
+  * mnt: Correct permission checks in do_remount
+    - CVE-2014-5207
+  * mnt: Change the default remount atime from relatime to the existing
+    value
+    - CVE-2014-5207
+
+ -- Brad Figg <brad.figg@canonical.com>  Tue, 29 Jul 2014 08:25:07 -0700
+
+linux (3.13.0-33.58) trusty; urgency=low
+
+  [ Brad Figg ]
+
+  * Release Tracking Bug
+    - LP: #1349897
 
   [ Upstream Kernel Changes ]
 
@@ -16,7 +38,7 @@ linux-lts-trusty (3.13.0-33.58~precise1) precise; urgency=low
   * n_tty: Fix buffer overruns with larger-than-4k pastes
     - LP: #1208740
 
- -- Brad Figg <brad.figg@canonical.com>  Wed, 30 Jul 2014 14:19:08 -0700
+ -- Tim Gardner <tim.gardner@canonical.com>  Fri, 18 Jul 2014 14:57:50 +0000
 
 linux (3.13.0-32.57) trusty; urgency=low
 
