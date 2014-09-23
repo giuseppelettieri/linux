@@ -1450,6 +1450,7 @@ i6300esb
 i7300_edac
 i740fb
 i7core_edac
+i810
 i810fb
 i82092
 i82365
@@ -3978,6 +3979,7 @@ xfrm_algo
 xfrm_ipcomp
 xfrm_user
 xfs
+xgene-enet
 xgifb
 xgmac
 xillybus_core

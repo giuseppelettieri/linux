@@ -2709,6 +2709,7 @@ xfrm_algo
 xfrm_ipcomp
 xfrm_user
 xfs
+xgene-enet
 xgmac
 xilinx_uartps
 xillybus_core
