@@ -1,9 +1,50 @@
-linux-lts-trusty (3.13.0-38.65~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-39.66~precise1) precise; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1379458
+    - LP: #1386866
+
+  [ Upstream Kernel Changes ]
+
+  * KVM: x86: Check non-canonical addresses upon WRMSR
+    - LP: #1384539
+    - CVE-2014-3610
+  * KVM: x86: Prevent host from panicking on shared MSR writes.
+    - LP: #1384539
+    - CVE-2014-3610
+  * KVM: x86: Improve thread safety in pit
+    - LP: #1384540
+    - CVE-2014-3611
+  * KVM: x86: Fix wrong masking on relative jump/call
+    - LP: #1384545
+    - CVE-2014-3647
+  * KVM: x86: Warn if guest virtual address space is not 48-bits
+    - LP: #1384545
+    - CVE-2014-3647
+  * KVM: x86: Emulator fixes for eip canonical checks on near branches
+    - LP: #1384545
+    - CVE-2014-3647
+  * KVM: x86: emulating descriptor load misses long-mode case
+    - LP: #1384545
+    - CVE-2014-3647
+  * KVM: x86: Handle errors when RIP is set during far jumps
+    - LP: #1384545
+    - CVE-2014-3647
+  * kvm: vmx: handle invvpid vm exit gracefully
+    - LP: #1384544
+    - CVE-2014-3646
+  * Input: synaptics - gate forcepad support by DMI check
+    - LP: #1381815
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 29 Oct 2014 09:16:40 +0000
+
+linux (3.13.0-38.65) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1379244
 
   [ Andy Whitcroft ]
 
@@ -256,7 +297,7 @@ linux-lts-trusty (3.13.0-38.65~precise1) precise; urgency=low
   * net-gre-gro: Fix a bug that breaks the forwarding path
     - LP: #1377851
 
- -- Luis Henriques <luis.henriques@canonical.com>  Thu, 09 Oct 2014 19:17:24 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Thu, 09 Oct 2014 10:31:36 +0100
 
 linux (3.13.0-37.64) trusty; urgency=low
 
