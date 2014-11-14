@@ -1,9 +1,22 @@
-linux-lts-trusty (3.13.0-40.68~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-40.69~precise1) precise; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1389197
+
+  [ Upstream Kernel Changes ]
+
+  * regmap: fix kernel hang on regmap_bulk_write with zero val_count.
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Fri, 14 Nov 2014 09:54:26 +0000
+
+linux (3.13.0-40.68) trusty; urgency=low
 
   [ Brad Figg ]
 
   * Release Tracking Bug
-    - LP: #1389197
+    - LP: #1388943
   * SAUCE: DEP8 test to run our regression tests
     - LP: #1385330
   * SAUCE: The very first thing we should do when testing is make sure we
@@ -614,7 +627,7 @@ linux-lts-trusty (3.13.0-40.68~precise1) precise; urgency=low
   * ipmi: Turn off default probing of interfaces
     - LP: #1388952
 
- -- Luis Henriques <luis.henriques@canonical.com>  Tue, 04 Nov 2014 13:31:11 +0000
+ -- Tim Gardner <tim.gardner@canonical.com>  Wed, 29 Oct 2014 14:39:14 -0400
 
 linux (3.13.0-39.66) trusty; urgency=low
 
