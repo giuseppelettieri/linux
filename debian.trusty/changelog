@@ -1,9 +1,45 @@
-linux-lts-trusty (3.13.0-41.70~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-43.72~precise1) precise; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1396376
+    - LP: #1399807
+
+  [ Upstream Kernel Changes ]
+
+  * x86_64, traps: Fix the espfix64 #DF fixup and rewrite it in C
+    - LP: #1398795
+    - CVE-2014-9090
+  * x86_64, traps: Rework bad_iret
+    - LP: #1398795
+    - CVE-2014-9090
+  * x86, kvm: Clear paravirt_enabled on KVM guests for espfix32's benefit
+    - LP: #1400314
+    - CVE-2014-8134
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Tue, 09 Dec 2014 11:09:22 +0000
+
+linux (3.13.0-42.71) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1399663
+
+  [ Upstream Kernel Changes ]
+
+  * x86_64, traps: Stop using IST for #SS
+    - LP: #1398795
+    - CVE-2014-9090
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Fri, 05 Dec 2014 14:29:10 +0000
+
+linux (3.13.0-41.70) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1396112
 
   [ Chris J Arges ]
 
