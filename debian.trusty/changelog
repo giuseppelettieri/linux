@@ -1,9 +1,34 @@
-linux-lts-trusty (3.13.0-46.75~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-46.77~precise1) precise; urgency=low
+
+  [ Seth Forshee ]
+
+  * Revert "ipv6: fix swapped ipv4/ipv6 mtu_reduced callbacks"
+    - LP: #1404558
+  * Release Tracking Bug
+    - LP: #1427297
+
+ -- Seth Forshee <seth.forshee@canonical.com>  Mon, 02 Mar 2015 16:47:44 -0600
+
+linux (3.13.0-46.76) trusty; urgency=low
+
+  [ Kamal Mostafa ]
+
+  * Release Tracking Bug
+    - LP: #1426060
+
+  [ Upstream Kernel Changes ]
+
+  * clocksource: arch_timer: Only use the virtual counter (CNTVCT) on arm64
+    - LP: #1426043
+
+ -- Kamal Mostafa <kamal@canonical.com>  Thu, 26 Feb 2015 09:53:44 -0800
+
+linux (3.13.0-46.75) trusty; urgency=low
 
   [ Seth Forshee ]
 
   * Release Tracking Bug
-    - LP: #1420661
+    - LP: #1419963
 
   [ Andy Whitcroft ]
 
@@ -363,7 +388,7 @@ linux-lts-trusty (3.13.0-46.75~precise1) precise; urgency=low
   * SAUCE: ubuntu/i915: power on sink if dpcd read fail
     - LP: #1416451
 
- -- Seth Forshee <seth.forshee@canonical.com>  Wed, 11 Feb 2015 08:52:25 -0600
+ -- Seth Forshee <seth.forshee@canonical.com>  Mon, 09 Feb 2015 14:08:50 -0600
 
 linux (3.13.0-45.74) trusty; urgency=low
 
