@@ -3257,6 +3257,10 @@ static int i40e_configure_tx_ring(struct i40e_ring *ring)
 	/* cache tail off for easier writes later */
 	ring->tail = hw->hw_addr + I40E_QTX_TAIL(pf_q);
 
+#ifdef DEV_NETMAP
+	i40e_netmap_configure_tx_ring(ring);
+#endif /* DEV_NETMAP */
+
 	return 0;
 }
 
@@ -3373,6 +3377,11 @@ static int i40e_configure_rx_ring(struct i40e_ring *ring)
 	/* cache tail for quicker writes, and clear the reg before use */
 	ring->tail = hw->hw_addr + I40E_QRX_TAIL(pf_q);
 	writel(0, ring->tail);
+
+#ifdef DEV_NETMAP
+	if (i40e_netmap_configure_rx_ring(ring))
+		return 0;
+#endif /* DEV_NETMAP */
 
 	if (ring->xsk_umem) {
 		xsk_buff_set_rxq_info(ring->xsk_umem, &ring->xdp_rxq);
