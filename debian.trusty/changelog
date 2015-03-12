@@ -1,9 +1,25 @@
-linux-lts-trusty (3.13.0-47.78~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-48.80~precise1) precise; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1431491
+  * Merged back all changes that were in Ubuntu-3.13.0-47.78
+
+  [ Upstream Kernel Changes ]
+
+  * xfs: remote attribute overwrite causes transaction overrun
+    - LP: #1429821
+    - CVE-2015-0274
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Thu, 12 Mar 2015 18:05:02 +0000
+
+linux (3.13.0-47.78) trusty; urgency=low
 
   [ Seth Forshee ]
 
   * Release Tracking Bug
-    - LP: #1428293
+    - LP: #1427733
 
   [ Rodrigo Vivi ]
 
@@ -242,7 +258,17 @@ linux-lts-trusty (3.13.0-47.78~precise1) precise; urgency=low
   * Linux 3.13.11-ckt16
     - LP: #1427438
 
- -- Seth Forshee <seth.forshee@canonical.com>  Wed, 04 Mar 2015 14:20:54 -0600
+ -- Seth Forshee <seth.forshee@canonical.com>  Tue, 03 Mar 2015 09:33:08 -0600
+
+linux (3.13.0-46.79) trusty; urgency=low
+
+  [ Upstream Kernel Changes ]
+
+  * IB/core: Prevent integer overflow in ib_umem_get address arithmetic
+    - LP: #1413741
+    - CVE-2015-8159
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Mon, 09 Mar 2015 17:42:23 +0000
 
 linux (3.13.0-46.77) trusty; urgency=low
 
