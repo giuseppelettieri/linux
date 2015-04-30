@@ -1,12 +1,27 @@
-linux-lts-trusty (3.13.0-51.84~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-52.85~precise1) precise; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1444698
+    - LP: #1450242
+
+  [ Upstream Kernel Changes ]
+
+  * fs: take i_mutex during prepare_binprm for set[ug]id executables
+    - LP: #1447373
+    - CVE-2015-3339
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Thu, 30 Apr 2015 10:04:51 +0100
+
+linux (3.13.0-51.84) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1444141
   * Merged back Ubuntu-3.13.0-49.83 security release
 
- -- Luis Henriques <luis.henriques@canonical.com>  Wed, 15 Apr 2015 22:16:16 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Tue, 14 Apr 2015 21:38:57 +0100
 
 linux (3.13.0-50.82) trusty; urgency=low
 
