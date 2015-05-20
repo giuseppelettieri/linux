@@ -1,9 +1,38 @@
-linux-lts-trusty (3.13.0-53.87~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-53.89~precise1) precise; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1452900
+    - LP: #1457142
+
+  [ Upstream Kernel Changes ]
+
+  * tcp: Fix crash in TCP Fast Open
+    - LP: #1447371
+    - CVE-2015-3332
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 20 May 2015 18:04:55 +0100
+
+linux (3.13.0-53.88) trusty; urgency=low
+
+  [ Brad Figg ]
+
+  * Release Tracking Bug
+    - LP: #1454785
+
+  [ Upstream Kernel Changes ]
+
+  * mmc: card: Don't access RPMB partitions for normal read/write
+    - LP: #1454013
+
+ -- Brad Figg <brad.figg@canonical.com>  Wed, 13 May 2015 10:15:29 -0700
+
+linux (3.13.0-53.87) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1452736
 
   [ dann frazier ]
 
@@ -445,7 +474,7 @@ linux-lts-trusty (3.13.0-53.87~precise1) precise; urgency=low
   * Linux 3.13.11-ckt19
     - LP: #1451900
 
- -- Luis Henriques <luis.henriques@canonical.com>  Fri, 08 May 2015 10:11:35 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Thu, 07 May 2015 14:47:02 +0100
 
 linux (3.13.0-52.86) trusty; urgency=low
 
