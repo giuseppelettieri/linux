@@ -1,9 +1,19 @@
-linux-lts-trusty (3.13.0-54.91~precise1) precise; urgency=medium
+linux-lts-trusty (3.13.0-55.92~precise1) precise; urgency=low
+
+  [ Andy Whitcroft ]
+
+  * SAUCE: overlayfs: when copying up and reading directories ensure
+    mounter had permissions V2
+    - CVE-2015-1328
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Fri, 12 Jun 2015 10:03:45 +0100
+
+linux (3.13.0-54.91) trusty; urgency=medium
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1459068
+    - LP: #1458618
 
   [ Upstream Kernel Changes ]
 
@@ -11,7 +21,7 @@ linux-lts-trusty (3.13.0-54.91~precise1) precise; urgency=medium
     called by netpoll."
     - LP: #1454746
 
- -- Luis Henriques <luis.henriques@canonical.com>  Wed, 27 May 2015 11:06:53 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Tue, 26 May 2015 17:19:30 +0100
 
 linux (3.13.0-54.90) trusty; urgency=low
 
