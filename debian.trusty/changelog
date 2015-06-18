@@ -1,4 +1,19 @@
-linux-lts-trusty (3.13.0-55.92~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-55.94~precise1) precise; urgency=low
+
+  [ Brad Figg ]
+
+  * Release Tracking Bug
+    - LP: #1466349
+
+  [ Andy Whitcroft ]
+
+  * SAUCE: ensure that upper/lower layers are valid before checking
+    permissions
+    - LP: #1465998
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Thu, 18 Jun 2015 10:08:53 +0100
+
+linux (3.13.0-55.92) trusty; urgency=low
 
   [ Andy Whitcroft ]
 
@@ -6,7 +21,7 @@ linux-lts-trusty (3.13.0-55.92~precise1) precise; urgency=low
     mounter had permissions V2
     - CVE-2015-1328
 
- -- Luis Henriques <luis.henriques@canonical.com>  Fri, 12 Jun 2015 10:03:45 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Fri, 12 Jun 2015 09:40:20 +0100
 
 linux (3.13.0-54.91) trusty; urgency=medium
 
