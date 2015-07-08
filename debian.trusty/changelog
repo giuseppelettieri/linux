@@ -1,9 +1,23 @@
-linux-lts-trusty (3.13.0-58.96~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-58.97~precise1) precise; urgency=low
 
   [ Brad Figg ]
 
   * Release Tracking Bug
-    - LP: #1472091
+    - LP: #1472545
+
+  [ Upstream Kernel Changes ]
+
+  * vm: Fix incomplete backport of VM_FAULT_SIGSEGV handling support
+    - LP: #1471892
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 08 Jul 2015 14:43:34 +0100
+
+linux (3.13.0-58.96) trusty; urgency=low
+
+  [ Brad Figg ]
+
+  * Release Tracking Bug
+    - LP: #1471991
 
   [ Iyappan Subramanian ]
 
@@ -265,7 +279,7 @@ linux-lts-trusty (3.13.0-58.96~precise1) precise; urgency=low
   * Linux 3.13.11-ckt22
     - LP: #1471233
 
- -- Luis Henriques <luis.henriques@canonical.com>  Tue, 07 Jul 2015 14:03:17 +0100
+ -- Brad Figg <brad.figg@canonical.com>  Mon, 06 Jul 2015 14:41:28 -0700
 
 linux (3.13.0-57.95) trusty; urgency=low
 
