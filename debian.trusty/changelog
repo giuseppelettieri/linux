@@ -1,12 +1,25 @@
-linux-lts-trusty (3.13.0-62.101~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-62.102~precise1) precise; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1479868
+    - LP: #1483893
+
+  [ Upstream Kernel Changes ]
+
+  * Revert "Bluetooth: ath3k: Add support of 04ca:300d AR3012 device"
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 12 Aug 2015 12:07:43 +0100
+
+linux (3.13.0-62.101) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1479329
   * Merged back Ubuntu-3.13.0-61.100
 
- -- Luis Henriques <luis.henriques@canonical.com>  Thu, 30 Jul 2015 17:30:42 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 29 Jul 2015 13:06:13 +0100
 
 linux (3.13.0-60.99) trusty; urgency=low
 
