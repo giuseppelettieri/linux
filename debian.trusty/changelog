@@ -1,3 +1,16 @@
+linux-lts-trusty (3.13.0-63.104~precise1) precise; urgency=medium
+
+  [ Luis Henriques ]
+
+  * No change upload to fix source package in PPA.
+
+  [ Brad Figg ]
+
+  * Release Tracking Bug
+    - LP: #1485173
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Tue, 18 Aug 2015 17:26:15 +0100
+
 linux-lts-trusty (3.13.0-63.103~precise1) precise; urgency=low
 
   [ Brad Figg ]
