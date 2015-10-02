@@ -1,16 +1,26 @@
-linux-lts-trusty (3.13.0-65.105~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-65.106~precise1) precise; urgency=low
+
+  [ Upstream Kernel Changes ]
+
+  * Initialize msg/shm IPC objects before doing ipc_addid()
+    - LP: #1502032
+    - CVE-2015-7613
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Fri, 02 Oct 2015 21:54:52 +0100
+
+linux (3.13.0-65.105) trusty; urgency=low
 
   [ Brad Figg ]
 
   * Release Tracking Bug
-    - LP: #1498291
+    - LP: #1498108
 
   [ Upstream Kernel Changes ]
 
   * net: Fix skb_set_peeked use-after-free bug
       - LP: #1497184
 
- -- Luis Henriques <luis.henriques@canonical.com>  Tue, 22 Sep 2015 13:59:02 +0100
+ -- Brad Figg <brad.figg@canonical.com>  Mon, 21 Sep 2015 10:16:41 -0700
 
 linux (3.13.0-64.104) trusty; urgency=low
 
