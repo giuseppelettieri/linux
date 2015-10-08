@@ -9874,6 +9874,7 @@ EXPORT_SYMBOL vmlinux 0xffb94ef0	_test_and_change_bit
 EXPORT_SYMBOL vmlinux 0xffd2cf99	omap_dss_get_num_overlay_managers
 EXPORT_SYMBOL vmlinux 0xffd5a395	default_wake_function
 EXPORT_SYMBOL vmlinux 0xffdb82bc	sg_free_table
+EXPORT_SYMBOL vmlinux 0xffe0bc82	__ip4_datagram_connect
 EXPORT_SYMBOL vmlinux 0xffeb0145	page_readlink
 EXPORT_SYMBOL vmlinux 0xfff25dd8	genphy_read_status
 EXPORT_SYMBOL_GPL crypto/ablk_helper 0x37afcc9f	ablk_set_key

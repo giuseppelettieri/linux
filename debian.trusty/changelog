@@ -1,9 +1,30 @@
-linux-lts-trusty (3.13.0-66.107~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-66.108~precise1) precise; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1503900
+
+  [ Andy Whitcroft ]
+
+  * Revert "SAUCE: aufs3: mmap: Fix races in madvise_remove() and
+    sys_msync()"
+    - LP: #1503655
+
+  [ Ben Hutchings ]
+
+  * SAUCE: aufs3: mmap: Fix races in madvise_remove() and sys_msync()
+    - LP: #1503655
+    - CVE-2015-7312
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Thu, 08 Oct 2015 10:17:15 +0100
+
+linux (3.13.0-66.107) trusty; urgency=low
 
   [ Brad Figg ]
 
   * Release Tracking Bug
-    - LP: #1503118
+    - LP: #1503021
 
   [ Ben Hutchings ]
 
@@ -148,7 +169,7 @@ linux-lts-trusty (3.13.0-66.107~precise1) precise; urgency=low
   * Linux 3.13.11-ckt27
     - LP: #1500810
 
- -- Luis Henriques <luis.henriques@canonical.com>  Tue, 06 Oct 2015 10:05:21 +0100
+ -- Brad Figg <brad.figg@canonical.com>  Mon, 05 Oct 2015 12:59:00 -0700
 
 linux (3.13.0-65.106) trusty; urgency=low
 

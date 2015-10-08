@@ -4530,6 +4530,7 @@ EXPORT_SYMBOL vmlinux 0x12ca917c	i2c_register_driver
 EXPORT_SYMBOL vmlinux 0x12da5bb2	__kmalloc
 EXPORT_SYMBOL vmlinux 0x132d09c5	bio_advance
 EXPORT_SYMBOL vmlinux 0x13307fde	vsscanf
+EXPORT_SYMBOL vmlinux 0x13410936	__ip4_datagram_connect
 EXPORT_SYMBOL vmlinux 0x1348760d	ipmi_request_settime
 EXPORT_SYMBOL vmlinux 0x134b0fd1	set_user_nice
 EXPORT_SYMBOL vmlinux 0x1357d9db	softnet_data

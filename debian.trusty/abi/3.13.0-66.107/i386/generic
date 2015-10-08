@@ -7128,6 +7128,7 @@ EXPORT_SYMBOL vmlinux 0x48193639	acpi_lid_open
 EXPORT_SYMBOL vmlinux 0x481cb9ab	acpi_enter_sleep_state_prep
 EXPORT_SYMBOL vmlinux 0x481d8eaf	sync_dirty_buffer
 EXPORT_SYMBOL vmlinux 0x482a2a49	param_set_charp
+EXPORT_SYMBOL vmlinux 0x484ebea5	__ip4_datagram_connect
 EXPORT_SYMBOL vmlinux 0x4859b8bb	rtc_year_days
 EXPORT_SYMBOL vmlinux 0x4865219f	generic_cont_expand_simple
 EXPORT_SYMBOL vmlinux 0x486d2f29	dqstats

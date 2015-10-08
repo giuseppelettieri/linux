@@ -7281,6 +7281,7 @@ EXPORT_SYMBOL vmlinux 0x53bb01e2	vm_stat
 EXPORT_SYMBOL vmlinux 0x53c335b3	prepare_binprm
 EXPORT_SYMBOL vmlinux 0x53deec37	skb_append
 EXPORT_SYMBOL vmlinux 0x53f2ef10	wait_for_completion_interruptible
+EXPORT_SYMBOL vmlinux 0x54012c25	__ip4_datagram_connect
 EXPORT_SYMBOL vmlinux 0x54048935	__scsi_iterate_devices
 EXPORT_SYMBOL vmlinux 0x5409775b	free_irq_cpu_rmap
 EXPORT_SYMBOL vmlinux 0x540c6312	acpi_bus_get_status

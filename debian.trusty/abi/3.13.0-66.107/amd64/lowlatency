@@ -6798,6 +6798,7 @@ EXPORT_SYMBOL vmlinux 0x3a08475f	platform_thermal_notify
 EXPORT_SYMBOL vmlinux 0x3a0dbb94	pnp_is_active
 EXPORT_SYMBOL vmlinux 0x3a1110d0	sk_run_filter
 EXPORT_SYMBOL vmlinux 0x3a20ff73	__crc32c_le
+EXPORT_SYMBOL vmlinux 0x3a27071a	__ip4_datagram_connect
 EXPORT_SYMBOL vmlinux 0x3a32839e	intel_gtt_chipset_flush
 EXPORT_SYMBOL vmlinux 0x3a349e75	vfs_path_lookup
 EXPORT_SYMBOL vmlinux 0x3a36d537	tty_wait_until_sent

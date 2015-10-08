@@ -6931,6 +6931,7 @@ EXPORT_SYMBOL vmlinux 0x421cd62d	pnpacpi_protocol
 EXPORT_SYMBOL vmlinux 0x42350e8d	ucs2_strlen
 EXPORT_SYMBOL vmlinux 0x42363351	blk_mq_free_queue
 EXPORT_SYMBOL vmlinux 0x423b776a	ipmi_create_user
+EXPORT_SYMBOL vmlinux 0x423c6adc	__ip4_datagram_connect
 EXPORT_SYMBOL vmlinux 0x42575488	pci_release_region
 EXPORT_SYMBOL vmlinux 0x42595e58	vgacon_text_force
 EXPORT_SYMBOL vmlinux 0x42751dcb	agp_backend_release
