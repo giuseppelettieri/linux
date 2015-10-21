@@ -1,9 +1,35 @@
-linux-lts-trusty (3.13.0-66.108~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-67.109~precise1) precise; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1503900
+    - LP: #1508201
+
+  [ Tim Gardner ]
+
+  * [Config] Add MMC modules sufficient for net booting
+    - LP: #1502772
+
+  [ Upstream Kernel Changes ]
+
+  * USB: whiteheat: fix potential null-deref at probe
+    - LP: #1478826
+    - CVE-2015-5257
+  * dcache: Handle escaped paths in prepend_path
+    - LP: #1441108
+    - CVE-2015-2925
+  * vfs: Test for and handle paths that are unreachable from their mnt_root
+    - LP: #1441108
+    - CVE-2015-2925
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 21 Oct 2015 10:16:49 +0100
+
+linux (3.13.0-66.108) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1503713
 
   [ Andy Whitcroft ]
 
@@ -17,7 +43,7 @@ linux-lts-trusty (3.13.0-66.108~precise1) precise; urgency=low
     - LP: #1503655
     - CVE-2015-7312
 
- -- Luis Henriques <luis.henriques@canonical.com>  Thu, 08 Oct 2015 10:17:15 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 07 Oct 2015 14:29:57 +0100
 
 linux (3.13.0-66.107) trusty; urgency=low
 
