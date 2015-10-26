@@ -1,9 +1,23 @@
-linux-lts-trusty (3.13.0-67.109~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-67.110~precise1) precise; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1508201
+    - LP: #1509525
+
+  [ Upstream Kernel Changes ]
+
+  * Revert "net: Fix skb csum races when peeking"
+    - LP: #1508510
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Mon, 26 Oct 2015 11:36:15 +0000
+
+linux (3.13.0-67.109) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1507963
 
   [ Tim Gardner ]
 
@@ -22,7 +36,7 @@ linux-lts-trusty (3.13.0-67.109~precise1) precise; urgency=low
     - LP: #1441108
     - CVE-2015-2925
 
- -- Luis Henriques <luis.henriques@canonical.com>  Wed, 21 Oct 2015 10:16:49 +0100
+ -- Luis Henriques <luis.henriques@canonical.com>  Tue, 20 Oct 2015 10:42:53 +0100
 
 linux (3.13.0-66.108) trusty; urgency=low
 
