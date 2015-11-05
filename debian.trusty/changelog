@@ -1,16 +1,26 @@
-linux-lts-trusty (3.13.0-67.110~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-68.111~precise1) precise; urgency=low
+
+  [ Upstream Kernel Changes ]
+
+  * KVM: x86: vmx: avoid guest->host DOS by intercepting #AC
+    - LP: #1513540
+    - CVE-2015-5307
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Thu, 05 Nov 2015 20:03:07 +0000
+
+linux (3.13.0-67.110) trusty; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1509525
+    - LP: #1509341
 
   [ Upstream Kernel Changes ]
 
   * Revert "net: Fix skb csum races when peeking"
     - LP: #1508510
 
- -- Luis Henriques <luis.henriques@canonical.com>  Mon, 26 Oct 2015 11:36:15 +0000
+ -- Luis Henriques <luis.henriques@canonical.com>  Fri, 23 Oct 2015 11:53:53 +0100
 
 linux (3.13.0-67.109) trusty; urgency=low
 
