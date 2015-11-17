@@ -1,9 +1,23 @@
-linux-lts-trusty (3.13.0-69.112~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-70.113~precise1) precise; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1515055
+    - LP: #1516833
+
+  [ Upstream Kernel Changes ]
+
+  * arm64: errata: use KBUILD_CFLAGS_MODULE for erratum #843419
+    - LP: #1516682
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Tue, 17 Nov 2015 09:50:13 +0000
+
+linux (3.13.0-69.112) trusty; urgency=low
+
+  [ Luis Henriques ]
+
+  * Release Tracking Bug
+    - LP: #1514858
 
   [ Joseph Salisbury ]
 
@@ -306,7 +320,7 @@ linux-lts-trusty (3.13.0-69.112~precise1) precise; urgency=low
   * Linux 3.13.11-ckt29
     - LP: #1514853
 
- -- Luis Henriques <luis.henriques@canonical.com>  Wed, 11 Nov 2015 10:10:07 +0000
+ -- Luis Henriques <luis.henriques@canonical.com>  Tue, 10 Nov 2015 14:34:31 +0000
 
 linux (3.13.0-68.111) trusty; urgency=low
 
