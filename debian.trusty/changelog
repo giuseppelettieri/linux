@@ -1,16 +1,31 @@
-linux-lts-trusty (3.13.0-70.113~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-71.114~precise1) precise; urgency=low
+
+  [ Brad Figg ]
+
+  * Release Tracking Bug
+    - LP: #1521550
+
+  [ Upstream Kernel Changes ]
+
+  * fib_rules: Fix dump_rules() not to exit early
+    - LP: #1514911
+    - LP: #1514785
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Thu, 26 Nov 2015 14:27:35 +0000
+
+linux (3.13.0-70.113) trusty; urgency=low
 
   [ Luis Henriques ]
 
   * Release Tracking Bug
-    - LP: #1516833
+    - LP: #1516733
 
   [ Upstream Kernel Changes ]
 
   * arm64: errata: use KBUILD_CFLAGS_MODULE for erratum #843419
     - LP: #1516682
 
- -- Luis Henriques <luis.henriques@canonical.com>  Tue, 17 Nov 2015 09:50:13 +0000
+ -- Luis Henriques <luis.henriques@canonical.com>  Mon, 16 Nov 2015 17:47:36 +0000
 
 linux (3.13.0-69.112) trusty; urgency=low
 
