@@ -1,4 +1,18 @@
-linux-lts-trusty (3.13.0-74.117~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-74.118~precise1) precise; urgency=low
+
+  [ Kamal Mostafa ]
+
+  * Release Tracking Bug
+    - LP: #1527467
+
+  [ Jann Horn ]
+
+  * ptrace: being capable wrt a process requires mapped uids/gids
+    - LP: #1527374
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Fri, 18 Dec 2015 10:10:21 +0000
+
+linux (3.13.0-74.117) trusty; urgency=low
 
   [ Upstream Kernel Changes ]
 
@@ -28,7 +42,7 @@ linux-lts-trusty (3.13.0-74.117~precise1) precise; urgency=low
   * xen/pciback: Don't allow MSI-X ops if PCI_COMMAND_MEMORY is not set.
     - CVE-2015-8551, CVE-2015-8552, CVE-2015-8553
 
- -- Luis Henriques <luis.henriques@canonical.com>  Thu, 17 Dec 2015 10:11:36 +0000
+ -- Luis Henriques <luis.henriques@canonical.com>  Wed, 16 Dec 2015 18:13:16 +0000
 
 linux (3.13.0-73.116) trusty; urgency=low
 
