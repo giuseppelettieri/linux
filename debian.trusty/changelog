@@ -1,16 +1,26 @@
-linux-lts-trusty (3.13.0-74.118~precise1) precise; urgency=low
+linux-lts-trusty (3.13.0-76.120~precise1) precise; urgency=low
+
+  [ Upstream Kernel Changes ]
+
+  * KEYS: Fix keyring ref leak in join_session_keyring()
+    - LP: #1534887
+    - CVE-2016-0728
+
+ -- Luis Henriques <luis.henriques@canonical.com>  Tue, 19 Jan 2016 10:49:51 +0000
+
+linux (3.13.0-74.118) trusty; urgency=low
 
   [ Kamal Mostafa ]
 
   * Release Tracking Bug
-    - LP: #1527467
+    - LP: #1527404
 
   [ Jann Horn ]
 
   * ptrace: being capable wrt a process requires mapped uids/gids
     - LP: #1527374
 
- -- Luis Henriques <luis.henriques@canonical.com>  Fri, 18 Dec 2015 10:10:21 +0000
+ -- Kamal Mostafa <kamal@canonical.com>  Thu, 17 Dec 2015 13:06:31 -0800
 
 linux (3.13.0-74.117) trusty; urgency=low
 
