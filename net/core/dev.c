@@ -132,8 +132,35 @@
 #include <linux/hashtable.h>
 #include <linux/vmalloc.h>
 #include <linux/if_macvlan.h>
+#include <linux/sysctl.h>
 
 #include "net-sysfs.h"
+
+static int pspat_no_busylock = 1;
+static int pspat_zero = 0;
+static int pspat_one = 1;
+static struct ctl_table_header *pspat_sysctl_hdr;
+static struct ctl_table pspat_leaves[] = {
+	{
+		.procname	= "no_busylock",
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.data		= &pspat_no_busylock,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= &pspat_zero,
+		.extra2		= &pspat_one,
+	},
+	{}
+};
+
+static struct ctl_table pspat_root[] = {
+	{
+		.procname	= "pspat",
+		.mode		= 0644,
+		.child		= pspat_leaves,
+	},
+	{}
+};
 
 /* Instead of increasing this, you should create a hash table. */
 #define MAX_GRO_SKBS 8
@@ -2703,7 +2730,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 	 * This permits __QDISC_STATE_RUNNING owner to get the lock more often
 	 * and dequeue packets faster.
 	 */
-	contended = qdisc_is_running(q);
+	contended = !pspat_no_busylock && qdisc_is_running(q);
 	if (unlikely(contended))
 		spin_lock(&q->busylock);
 
@@ -7002,6 +7029,8 @@ static void __net_exit default_device_exit_batch(struct list_head *net_list)
 	struct net *net;
 	LIST_HEAD(dev_kill_list);
 
+	unregister_sysctl_table(pspat_sysctl_hdr);
+
 	/* To prevent network device cleanup code from dereferencing
 	 * loopback devices or network devices that have been freed
 	 * wait here for all pending unregistrations to complete,
@@ -7116,6 +7145,12 @@ static int __init net_dev_init(void)
 
 	hotcpu_notifier(dev_cpu_callback, 0);
 	dst_init();
+
+	pspat_sysctl_hdr = register_sysctl_table(pspat_root);
+	if (pspat_sysctl_hdr == NULL) {
+		printk(KERN_WARNING "unable to register pspat_root");
+	}
+
 	rc = 0;
 out:
 	return rc;
