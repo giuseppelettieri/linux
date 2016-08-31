@@ -136,31 +136,92 @@
 
 #include "net-sysfs.h"
 
-static int pspat_no_busylock = 1;
+static int pspat_enable = 0;
 static int pspat_zero = 0;
 static int pspat_one = 1;
+static unsigned long pspat_ulongzero = 0UL;
+static unsigned long pspat_ulongmax = (unsigned long)-1;
 static struct ctl_table_header *pspat_sysctl_hdr;
-static struct ctl_table pspat_leaves[] = {
-	{
-		.procname	= "no_busylock",
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.data		= &pspat_no_busylock,
-		.proc_handler	= &proc_dointvec_minmax,
-		.extra1		= &pspat_zero,
-		.extra2		= &pspat_one,
-	},
-	{}
-};
 
 static struct ctl_table pspat_root[] = {
 	{
 		.procname	= "pspat",
 		.mode		= 0644,
-		.child		= pspat_leaves,
 	},
 	{}
 };
+
+struct pspat_stats {
+	unsigned long dropped;
+} __attribute__((aligned(32)));
+static struct pspat_stats *pspat_stats;
+
+static int
+pspat_init(void)
+{
+	int nproc = num_online_cpus(), i;
+	int rc = -ENOMEM;
+	struct ctl_table *t, *leaves;
+	char *name;
+
+	pspat_stats = (struct pspat_stats*)alloc_page(GFP_KERNEL); // XXX max 4096/32 processors
+	if (pspat_stats == NULL) {
+		printk(KERN_WARNING "pspat: unable to allocate stats page");
+		goto out;
+	}
+
+	leaves = kmalloc(sizeof(struct ctl_table) *
+			nproc + 1 /* no_busylock and per-cpu dropped cntr */
+			+ nproc * 16 /* space for the syctl names */,
+			GFP_KERNEL);
+	if (leaves == NULL) {
+		printk(KERN_WARNING "pspat: unable to allocate sysctls");
+		goto free_stats;
+	}
+
+	t = leaves;
+
+	t->procname	= "enable";
+	t->maxlen	= sizeof(int);
+	t->mode		= 0644;
+	t->data		= &pspat_enable;
+	t->proc_handler	= &proc_dointvec_minmax;
+	t->extra1	= &pspat_zero;
+	t->extra2	= &pspat_one;
+	
+	name = (char *)&leaves[nproc + 1];
+	for (i = 1; i <= nproc; i++) {
+		snprintf(name, 16, "dropped%d", nproc);
+		t = leaves + i;
+		t->procname	= name;
+		t->maxlen	= sizeof(unsigned long);
+		t->mode		= 0644;
+		t->data		= &pspat_stats[i - 1];
+		t->proc_handler	= &proc_doulongvec_minmax;
+		t->extra1	= &pspat_ulongzero;
+		t->extra2	= &pspat_ulongmax;
+		name += 16;
+	}
+	pspat_root[0].child = leaves;
+	pspat_sysctl_hdr = register_sysctl_table(pspat_root);
+	return 0;
+
+free_stats:
+	free_page((unsigned long)pspat_stats);
+out:
+	return rc;
+}
+
+static void
+pspat_fini(void)
+{
+	if (pspat_sysctl_hdr)
+		unregister_sysctl_table(pspat_sysctl_hdr);
+	if (pspat_root[0].child)
+		kfree(pspat_root[0].child);
+	if (pspat_stats)
+		free_page((unsigned long)pspat_stats);
+}
 
 /* Instead of increasing this, you should create a hash table. */
 #define MAX_GRO_SKBS 8
@@ -2724,13 +2785,22 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 
 	qdisc_pkt_len_init(skb);
 	qdisc_calculate_pkt_len(skb, q);
+
+	if (pspat_enable && pspat_stats) {
+		int cpu = get_cpu(); /* also disables preemption */
+		pspat_stats[cpu + 1].dropped++;
+		put_cpu();
+		kfree_skb(skb);
+		return 0;
+	}
+
 	/*
 	 * Heuristic to force contended enqueues to serialize on a
 	 * separate lock before trying to get qdisc main lock.
 	 * This permits __QDISC_STATE_RUNNING owner to get the lock more often
 	 * and dequeue packets faster.
 	 */
-	contended = !pspat_no_busylock && qdisc_is_running(q);
+	contended = qdisc_is_running(q);
 	if (unlikely(contended))
 		spin_lock(&q->busylock);
 
@@ -7029,7 +7099,7 @@ static void __net_exit default_device_exit_batch(struct list_head *net_list)
 	struct net *net;
 	LIST_HEAD(dev_kill_list);
 
-	unregister_sysctl_table(pspat_sysctl_hdr);
+	pspat_fini();
 
 	/* To prevent network device cleanup code from dereferencing
 	 * loopback devices or network devices that have been freed
@@ -7146,11 +7216,9 @@ static int __init net_dev_init(void)
 	hotcpu_notifier(dev_cpu_callback, 0);
 	dst_init();
 
-	pspat_sysctl_hdr = register_sysctl_table(pspat_root);
-	if (pspat_sysctl_hdr == NULL) {
-		printk(KERN_WARNING "unable to register pspat_root");
-	}
-
+	rc = pspat_init();
+	if (rc)
+		goto out;
 	rc = 0;
 out:
 	return rc;
