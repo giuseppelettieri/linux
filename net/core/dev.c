@@ -144,10 +144,38 @@ static unsigned long pspat_ulongzero = 0UL;
 static unsigned long pspat_ulongmax = (unsigned long)-1;
 static struct ctl_table_header *pspat_sysctl_hdr;
 
+static struct ctl_table pspat_static_ctl[] = {
+	{
+		.procname	= "cpu",
+		.mode		= 0444,
+		.child		= NULL, /* created at run-time */
+	},
+	{
+		.procname	= "enable",
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.data		= &pspat_enable,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= &pspat_zero,
+		.extra2		= &pspat_one,
+	},
+	{
+		.procname	= "debug_xmit",
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.data		= &pspat_debug_xmit,
+		.proc_handler	= &proc_dointvec_minmax,
+		.extra1		= &pspat_zero,
+		.extra2		= &pspat_one,
+	},
+	{}
+};
+
 static struct ctl_table pspat_root[] = {
 	{
 		.procname	= "pspat",
 		.mode		= 0444,
+		.child		= pspat_static_ctl,
 	},
 	{}
 };
@@ -160,63 +188,54 @@ static struct pspat_stats *pspat_stats;
 static int
 pspat_init(void)
 {
-	int nproc = num_online_cpus(), i;
+	int cpus = num_online_cpus(), i, n;
 	int rc = -ENOMEM;
 	struct ctl_table *t, *leaves;
+	void *buf;
 	char *name;
-	size_t size;
+	size_t size, extra_size;
 
-	pspat_stats = (struct pspat_stats*)alloc_page(GFP_KERNEL); // XXX max 4096/32 processors
+	pspat_stats = (struct pspat_stats*)get_zeroed_page(GFP_KERNEL); // XXX max 4096/32 cpus
 	if (pspat_stats == NULL) {
 		printk(KERN_WARNING "pspat: unable to allocate stats page");
 		goto out;
 	}
 
-	size = sizeof(struct ctl_table) * (nproc + 3) /* enable, per-cpu counter, null */
-		+ nproc * 16 /* space for the syctl names */,
-	leaves = kmalloc(size, GFP_KERNEL);
-	if (leaves == NULL) {
+        extra_size = cpus * 16 /* space for the syctl names */,
+	size = extra_size + sizeof(struct ctl_table) * (cpus + 1);
+	buf = kzalloc(size, GFP_KERNEL);
+	if (buf == NULL) {
 		printk(KERN_WARNING "pspat: unable to allocate sysctls");
 		goto free_stats;
 	}
-	memset(leaves, 0, size);
+	name = buf;
+	leaves = buf + extra_size;
 
-	t = &leaves[0];
-
-	t->procname	= "enable";
-	t->maxlen	= sizeof(int);
-	t->mode		= 0644;
-	t->data		= &pspat_enable;
-	t->proc_handler	= &proc_dointvec_minmax;
-	t->extra1	= &pspat_zero;
-	t->extra2	= &pspat_one;
-	
-	name = (char *)&leaves[nproc + 3];
-	for (i = 1; i <= nproc; i++) {
-		snprintf(name, 16, "dropped-%d", i - 1);
+	for (i = 0; i < cpus; i++) {
 		t = leaves + i;
+
+		n = snprintf(name, extra_size, "dropped-%d", i);
+		if (n >= extra_size) { /* truncated */
+			printk(KERN_WARNING "pspat: not enough space for per-cpu sysctl names");
+			goto free_leaves;
+		}
 		t->procname	= name;
+		name += n + 1;
+		extra_size -= n + 1;
+
 		t->maxlen	= sizeof(unsigned long);
 		t->mode		= 0644;
-		t->data		= &pspat_stats[i - 1];
+		t->data		= &pspat_stats[i].dropped;
 		t->proc_handler	= &proc_doulongvec_minmax;
 		t->extra1	= &pspat_ulongzero;
 		t->extra2	= &pspat_ulongmax;
-		name += 16;
 	}
-	t = &leaves[i];
-	t->procname	= "debug_xmit";
-	t->maxlen	= sizeof(int);
-	t->mode		= 0644;
-	t->data		= &pspat_debug_xmit;
-	t->proc_handler	= &proc_dointvec_minmax;
-	t->extra1	= &pspat_zero;
-	t->extra2	= &pspat_one;
-
-	pspat_root[0].child = leaves;
+	pspat_static_ctl[0].child = leaves;
 	pspat_sysctl_hdr = register_sysctl_table(pspat_root);
 	return 0;
 
+free_leaves:
+	kfree(buf);
 free_stats:
 	free_page((unsigned long)pspat_stats);
 out:
