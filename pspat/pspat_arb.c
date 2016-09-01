@@ -19,12 +19,19 @@ static int instances = 0; /* To be protected by a lock. */
 
 #define EMULATE
 #define PSPAT_QLEN           128
-#define PSPAT_QCACHE_LEN
 
 struct pspat_queue {
 	/* Input queue, written by clients, read by the arbiter. */
 	START_NEW_CACHELINE
 	struct sk_buff		*inq[PSPAT_QLEN];
+
+	/* Data structures private to the clients. */
+	START_NEW_CACHELINE
+	uint32_t		n_pending; /* number of pending elements
+					    * in the queue */
+	uint32_t		c_tail; /* next slot to use for put operation */
+	uint32_t		c_head; /* next packet to send down */
+	uint32_t		c_shead; /* cached value of s_head */
 
 	/* Output queue and s_head index, written by the arbiter,
 	 * read by clients. */
