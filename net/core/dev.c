@@ -136,6 +136,12 @@
 
 #include "net-sysfs.h"
 
+typedef int (*pspat_handler_t)(struct sk_buff *, struct Qdisc *,
+				 struct net_device *,
+				 struct netdev_queue *);
+pspat_handler_t pspat_handler;
+EXPORT_SYMBOL(pspat_handler);
+
 static int pspat_enable = 0;
 static int pspat_debug_xmit = 0;
 static int pspat_zero = 0;
@@ -2975,6 +2981,9 @@ static int __dev_queue_xmit(struct sk_buff *skb, void *accel_priv)
 #endif
 	trace_net_dev_queue(skb);
 	if (q->enqueue) {
+		pspat_handler_t h = rcu_dereference_bh(pspat_handler);
+		rc = h ? h(skb, q, dev, txq) : -ENOTTY;
+		if (rc == -ENOTTY)
 		rc = __dev_xmit_skb(skb, q, dev, txq);
 		goto out;
 	}
