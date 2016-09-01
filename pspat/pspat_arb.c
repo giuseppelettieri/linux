@@ -13,21 +13,44 @@
 #include <linux/delay.h>
 
 
+#define START_NEW_CACHELINE	____cacheline_aligned_in_smp
+
 static int instances = 0; /* To be protected by a lock. */
 
 #define EMULATE
 #define PSPAT_QLEN           128
+#define PSPAT_QCACHE_LEN
+
+struct pspat_queue {
+	/* Input queue, written by clients, read by the arbiter. */
+	START_NEW_CACHELINE
+	struct sk_buff		*inq[PSPAT_QLEN];
+
+	/* Output queue and s_head index, written by the arbiter,
+	 * read by clients. */
+	START_NEW_CACHELINE
+	struct sk_buff		*outq[PSPAT_QLEN];
+	START_NEW_CACHELINE
+	uint32_t		s_head;
+
+	/* Data structures private to the arbiter. */
+	uint32_t		s_nhead; /* next packet to mark */
+	uint32_t		s_tail;	 /* start of next cacheline to copy
+					  * from inq to qcache */
+	uint32_t		s_next; /* next_packet to enq() from qcache */
+	uint32_t		q_cache_valid; /* cache can be accessed
+						* (peek, get) */
+
+	START_NEW_CACHELINE
+	struct sk_buff		*qcache[64U/sizeof(struct sk_buff *)];
+};
 
 struct pspat {
-	____cacheline_aligned_in_smp
-	struct sk_buff      *inq[PSPAT_QLEN];
-
-	____cacheline_aligned_in_smp
-	struct sk_buff      *outq[PSPAT_QLEN];
+	struct pspat_queue	queues[8]; /* NUM CORES */
 
 	wait_queue_head_t wqh;
 #ifdef EMULATE
-	struct timer_list emu_tmr;
+	struct timer_list	emu_tmr;
 #endif
 };
 
