@@ -137,6 +137,7 @@
 #include "net-sysfs.h"
 
 static int pspat_enable = 0;
+static int pspat_debug_xmit = 0;
 static int pspat_zero = 0;
 static int pspat_one = 1;
 static unsigned long pspat_ulongzero = 0UL;
@@ -146,7 +147,7 @@ static struct ctl_table_header *pspat_sysctl_hdr;
 static struct ctl_table pspat_root[] = {
 	{
 		.procname	= "pspat",
-		.mode		= 0644,
+		.mode		= 0444,
 	},
 	{}
 };
@@ -163,6 +164,7 @@ pspat_init(void)
 	int rc = -ENOMEM;
 	struct ctl_table *t, *leaves;
 	char *name;
+	size_t size;
 
 	pspat_stats = (struct pspat_stats*)alloc_page(GFP_KERNEL); // XXX max 4096/32 processors
 	if (pspat_stats == NULL) {
@@ -170,16 +172,16 @@ pspat_init(void)
 		goto out;
 	}
 
-	leaves = kmalloc(sizeof(struct ctl_table) *
-			nproc + 1 /* no_busylock and per-cpu dropped cntr */
-			+ nproc * 16 /* space for the syctl names */,
-			GFP_KERNEL);
+	size = sizeof(struct ctl_table) * (nproc + 3) /* enable, per-cpu counter, null */
+		+ nproc * 16 /* space for the syctl names */,
+	leaves = kmalloc(size, GFP_KERNEL);
 	if (leaves == NULL) {
 		printk(KERN_WARNING "pspat: unable to allocate sysctls");
 		goto free_stats;
 	}
+	memset(leaves, 0, size);
 
-	t = leaves;
+	t = &leaves[0];
 
 	t->procname	= "enable";
 	t->maxlen	= sizeof(int);
@@ -189,9 +191,9 @@ pspat_init(void)
 	t->extra1	= &pspat_zero;
 	t->extra2	= &pspat_one;
 	
-	name = (char *)&leaves[nproc + 1];
+	name = (char *)&leaves[nproc + 3];
 	for (i = 1; i <= nproc; i++) {
-		snprintf(name, 16, "dropped%d", nproc);
+		snprintf(name, 16, "dropped-%d", i - 1);
 		t = leaves + i;
 		t->procname	= name;
 		t->maxlen	= sizeof(unsigned long);
@@ -202,6 +204,15 @@ pspat_init(void)
 		t->extra2	= &pspat_ulongmax;
 		name += 16;
 	}
+	t = &leaves[i];
+	t->procname	= "debug_xmit";
+	t->maxlen	= sizeof(int);
+	t->mode		= 0644;
+	t->data		= &pspat_debug_xmit;
+	t->proc_handler	= &proc_dointvec_minmax;
+	t->extra1	= &pspat_zero;
+	t->extra2	= &pspat_one;
+
 	pspat_root[0].child = leaves;
 	pspat_sysctl_hdr = register_sysctl_table(pspat_root);
 	return 0;
@@ -2785,10 +2796,14 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 
 	qdisc_pkt_len_init(skb);
 	qdisc_calculate_pkt_len(skb, q);
+	
+	if (pspat_debug_xmit) {
+		printk(KERN_INFO "q %p dev %p txq %p root_lock %p", q, dev, txq, root_lock);
+	}
 
 	if (pspat_enable && pspat_stats) {
 		int cpu = get_cpu(); /* also disables preemption */
-		pspat_stats[cpu + 1].dropped++;
+		pspat_stats[cpu].dropped++;
 		put_cpu();
 		kfree_skb(skb);
 		return 0;
