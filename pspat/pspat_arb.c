@@ -16,11 +16,18 @@
 static int instances = 0; /* To be protected by a lock. */
 
 #define EMULATE
+#define PSPAT_QLEN           128
 
 struct pspat {
-    wait_queue_head_t wqh;
+	____cacheline_aligned_in_smp
+	struct sk_buff      *inq[PSPAT_QLEN];
+
+	____cacheline_aligned_in_smp
+	struct sk_buff      *outq[PSPAT_QLEN];
+
+	wait_queue_head_t wqh;
 #ifdef EMULATE
-    struct timer_list emu_tmr;
+	struct timer_list emu_tmr;
 #endif
 };
 
@@ -30,135 +37,135 @@ struct pspat {
 static void
 emu_tmr_cb(long unsigned arg)
 {
-    struct pspat *arb = (struct pspat *)arg;
+	struct pspat *arb = (struct pspat *)arg;
 
-    wake_up_interruptible(&arb->wqh);
-    mod_timer(&arb->emu_tmr, jiffies + msecs_to_jiffies(1000));
+	wake_up_interruptible(&arb->wqh);
+	mod_timer(&arb->emu_tmr, jiffies + msecs_to_jiffies(1000));
 }
 
 int
 pspat_arbiter_register(struct pspat *arb)
 {
-    arb->emu_tmr.function = emu_tmr_cb;
-    arb->emu_tmr.data = (long unsigned)arb;
-    mod_timer(&arb->emu_tmr, jiffies + msecs_to_jiffies(1000));
+	arb->emu_tmr.function = emu_tmr_cb;
+	arb->emu_tmr.data = (long unsigned)arb;
+	mod_timer(&arb->emu_tmr, jiffies + msecs_to_jiffies(1000));
 
-    return 0;
+	return 0;
 }
 
 int
 pspat_arbiter_unregister(struct pspat *arb)
 {
-    del_timer_sync(&arb->emu_tmr);
+	del_timer_sync(&arb->emu_tmr);
 
-    return 0;
+	return 0;
 }
 #endif
 
 static int
 pspat_open(struct inode *inode, struct file *f)
 {
-    struct pspat *arb;
-    int ret;
+	struct pspat *arb;
+	int ret;
 
-    if (instances) {
-        printk("PSPAT arbiter already exists\n");
-        return -EBUSY;
-    }
+	if (instances) {
+		printk("PSPAT arbiter already exists\n");
+		return -EBUSY;
+	}
 
-    arb = kzalloc(sizeof(*arb), GFP_KERNEL);
-    if (!arb) {
-        return -ENOMEM;
-    }
+	arb = kzalloc(sizeof(*arb), GFP_KERNEL);
+	if (!arb) {
+		return -ENOMEM;
+	}
 
-    init_waitqueue_head(&arb->wqh);
-    f->private_data = arb;
+	init_waitqueue_head(&arb->wqh);
+	f->private_data = arb;
 
-    ret = pspat_arbiter_register(arb);
-    if (ret) {
-        printk("Failed to register arbiter\n");
-        kfree(arb);
-        return ret;
-    }
+	ret = pspat_arbiter_register(arb);
+	if (ret) {
+		printk("Failed to register arbiter\n");
+		kfree(arb);
+		return ret;
+	}
 
-    instances ++;
+	instances ++;
 
-    return 0;
+	return 0;
 }
 
 static int
 pspat_release(struct inode *inode, struct file *f)
 {
-    struct pspat *arb = (struct pspat *)f->private_data;
+	struct pspat *arb = (struct pspat *)f->private_data;
 
-    pspat_arbiter_unregister(arb);
+	pspat_arbiter_unregister(arb);
 
-    kfree(arb);
-    f->private_data = NULL;
+	kfree(arb);
+	f->private_data = NULL;
 
-    instances --;
+	instances --;
 
-    return 0;
+	return 0;
 }
 
 static long
 pspat_ioctl(struct file *f, unsigned int cmd, unsigned long flags)
 {
-    struct pspat *arb = (struct pspat *)f->private_data;
-    DECLARE_WAITQUEUE(wait, current);
+	struct pspat *arb = (struct pspat *)f->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 
-    (void) cmd;
+	(void) cmd;
 
-    add_wait_queue(&arb->wqh, &wait);
+	add_wait_queue(&arb->wqh, &wait);
 
-    for (;;) {
-        current->state = TASK_INTERRUPTIBLE;
-        schedule();
-        if (signal_pending(current)) {
-            printk("Got a signal, returning to userspace\n");
-            return 0;
-        }
-        current->state = TASK_RUNNING;
-        printk("Woken up\n");
-    }
+	for (;;) {
+		current->state = TASK_INTERRUPTIBLE;
+		schedule();
+		if (signal_pending(current)) {
+			printk("Got a signal, returning to userspace\n");
+			return 0;
+		}
+		current->state = TASK_RUNNING;
+		printk("Woken up\n");
+	}
 
-    remove_wait_queue(&arb->wqh, &wait);
+	remove_wait_queue(&arb->wqh, &wait);
 
-    return 0;
+	return 0;
 }
 
 static const struct file_operations pspat_fops = {
-    .owner          = THIS_MODULE,
-    .release        = pspat_release,
-    .open           = pspat_open,
-    .unlocked_ioctl = pspat_ioctl,
-    .llseek         = noop_llseek,
+	.owner          = THIS_MODULE,
+	.release        = pspat_release,
+	.open           = pspat_open,
+	.unlocked_ioctl = pspat_ioctl,
+	.llseek         = noop_llseek,
 };
 
 static struct miscdevice pspat_misc = {
-    .minor = MISC_DYNAMIC_MINOR,
-    .name = "pspat",
-    .fops = &pspat_fops,
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "pspat",
+	.fops = &pspat_fops,
 };
 
 static int __init
 pspat_init(void)
 {
-    int ret;
+	int ret;
 
-    ret = misc_register(&pspat_misc);
-    if (ret) {
-        printk("Failed to register rlite misc device\n");
-        return ret;
-    }
+	ret = misc_register(&pspat_misc);
+	if (ret) {
+		printk("Failed to register rlite misc device\n");
+		return ret;
+	}
 
-    return 0;
+	return 0;
 }
 
 static void __exit
 pspat_fini(void)
 {
-    misc_deregister(&pspat_misc);
+	misc_deregister(&pspat_misc);
 }
 
 module_init(pspat_init);
