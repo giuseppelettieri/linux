@@ -1,10 +1,13 @@
 #ifndef __PSPAT_H__
 #define __PSPAT_H__
 
+#include <linux/jiffies.h>
+#define	time_second	(jiffies_to_msecs(jiffies) / 1000U )
+
 #define START_NEW_CACHELINE	____cacheline_aligned_in_smp
 
 //#define EMULATE
-#define PSPAT_QLEN           128
+#define PSPAT_QLEN           8
 
 struct pspat_queue {
 	/* Input queue, written by clients, read by the arbiter. */
@@ -31,6 +34,7 @@ struct pspat_queue {
 	uint32_t		arb_markq_head;
 	s64			arb_extract_next;
 	uint32_t		arb_pending; /* packets in the Qdisc */
+	int			arb_inq_full;
 
 	struct sk_buff		*cacheq[PSPAT_QLEN];
 	struct sk_buff		*markq[PSPAT_QLEN];
@@ -71,5 +75,27 @@ extern struct pspat_stats *pspat_stats;
 struct pspat_stats {
 	unsigned long dropped;
 } __attribute__((aligned(32)));
+
+#define ND(format, ...)
+#define D(format, ...)						\
+	do {							\
+		struct timeval __xxts;				\
+		do_gettimeofday(&__xxts);			\
+		printk(KERN_ERR "%03d.%06d [%4d] %-25s " format "\n",	\
+		(int)__xxts.tv_sec % 1000, (int)__xxts.tv_usec,	\
+		__LINE__, __FUNCTION__, ##__VA_ARGS__);		\
+	} while (0)
+
+/* rate limited, lps indicates how many per second */
+#define RD(lps, format, ...)					\
+	do {							\
+		static int t0, __cnt;				\
+		if (t0 != time_second) {			\
+			t0 = time_second;			\
+			__cnt = 0;				\
+		}						\
+		if (__cnt++ < lps)				\
+			D(format, ##__VA_ARGS__);		\
+	} while (0)
 
 #endif  /* __PSPAT_H__ */

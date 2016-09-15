@@ -15,6 +15,8 @@ pspat_cli_push(struct pspat_queue *pq, struct sk_buff *skb)
 {
 	uint32_t tail = pq->cli_inq_tail;
 
+	ND("skb %p len %d pq->inq[%d] %p", skb, skb->len, tail, pq->inq[tail]);
+
 	if (pq->inq[tail])
 		return -ENOBUFS;
 	pq->inq[tail] = skb;
@@ -35,6 +37,8 @@ pspat_arb_fetch(struct pspat_queue *pq)
 	uint32_t tail = pq->arb_cacheq_tail;
 	uint32_t head_first = head;
 
+	ND("before: head %u tail %u", head, tail);
+
 	/* cacheq should always be empty at this point */
 	while (pq->inq[head]) {
 		pq->cacheq[tail] = pq->inq[head];
@@ -42,9 +46,13 @@ pspat_arb_fetch(struct pspat_queue *pq)
 		pspat_next(head);
 		pspat_next(tail);
 		if (unlikely(head == head_first)) {
+			pq->arb_inq_full = 1;
 			break;
 		}
 	}
+
+	ND("after: head %u tail %u", head, tail);
+
 	pq->arb_inq_head = head;
 	pq->arb_cacheq_tail = tail;
 }
@@ -55,6 +63,9 @@ pspat_arb_get_skb(struct pspat_queue *pq)
 {
 	uint32_t head = pq->arb_cacheq_head;
 	struct sk_buff *skb = pq->cacheq[head];
+
+	ND("skb %p", skb);
+
 	if (skb) {
 		pq->cacheq[head] = NULL;
 		pspat_next(pq->arb_cacheq_head);
@@ -69,6 +80,8 @@ pspat_mark(struct pspat_queue *pq, struct sk_buff *skb)
 	uint32_t tail = pq->arb_markq_tail;
 
 	BUG_ON(skb->sender_cpu == 0);
+
+	ND("skb %p", skb);
 
 	pq->markq[tail] = skb;
 
@@ -88,6 +101,8 @@ pspat_arb_publish(struct pspat_queue *pq)
 	uint32_t head = pq->arb_markq_head;
 	uint32_t tail = pq->arb_outq_tail;
 
+	if (pq->markq[head])
+		ND("before: head %u tail %u", head, tail);
 	while (pq->markq[head]) {
 		if (likely(pq->outq[tail] == NULL)) {
 			pq->outq[tail] = pq->markq[head];
@@ -100,6 +115,7 @@ pspat_arb_publish(struct pspat_queue *pq)
 		pspat_next(head);
 		pspat_next(tail);
 	}
+	ND("after: head %u tail %u", head, tail);
 	pq->arb_markq_head = head;
 	pq->arb_outq_tail = tail;
 }
@@ -111,9 +127,11 @@ pspat_arb_ack(struct pspat_queue *pq)
 	uint32_t ntc = pq->arb_inq_ntc;
 	uint32_t head = pq->arb_inq_head;
 
-	while (ntc != head) {
+	ND("ntc %u head %u", ntc, head);
+	while (ntc != head || pq->arb_inq_full) {
 		pq->inq[ntc] = NULL;
 		pspat_next(ntc);
+		pq->arb_inq_full = 0;
 	}
 	pq->arb_inq_ntc = ntc;
 }
@@ -186,6 +204,7 @@ pspat_do_arbiter(struct pspat *arb)
 				 * the client chose the txq before sending
 				 * the skb to us, so we only need to recover it
 				 */
+				BUG_ON(dev == NULL);
 				txq = skb_get_tx_queue(dev, skb);
 
 				q = rcu_dereference_bh(txq->qdisc);
@@ -295,13 +314,14 @@ pspat_client_handler(struct sk_buff *skb, struct Qdisc *q,
 		printk(KERN_INFO "q %p dev %p txq %p root_lock %p", q, dev, txq, qdisc_lock(q));
 	}
 
-	if (!pspat_enable) {
+	if (!pspat_enable || !strcmp(dev->name, "eth0")) {
 		/* Not our business. */
 		return -ENOTTY;
 	}
 	qdisc_calculate_pkt_len(skb, q);
 	cpu = get_cpu(); /* also disables preemption */
 	pq = pspat_arb->queues + cpu;
+	ND("cpu %d skb->sender_id %d", cpu, skb->sender_cpu);
 	if (pspat_cli_push(pq, skb)) {
 		pspat_stats[cpu].dropped++;
 		kfree_skb(skb);
