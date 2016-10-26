@@ -332,6 +332,7 @@ extern int (*pspat_handler)(struct sk_buff *, struct Qdisc *,
 			    struct net_device *,
 			    struct netdev_queue *);
 
+/* body of the arbiter thread */
 static int
 arb_worker_func(void *data)
 {
@@ -350,6 +351,9 @@ arb_worker_func(void *data)
 				printk("PSPAT arbiter unregistered\n");
 			}
 
+			/* we block and wait for pspat_enable_proc_handler()
+			 * to wake us up
+			 */
 			set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
 
@@ -364,6 +368,7 @@ arb_worker_func(void *data)
 				printk("PSPAT arbiter registered\n");
 			}
 			pspat_do_arbiter(arb);
+			// XXX check wether we should go to sleep
 			if (need_resched()) {
 				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout(1);

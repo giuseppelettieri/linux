@@ -10,6 +10,8 @@
 
 /* push a new packet to the client queue
  * returns -ENOBUFS if the queue is full
+ * 
+ * XXX this is not reentrant
  */
 static int
 pspat_cli_push(struct pspat_queue *pq, struct sk_buff *skb)
@@ -17,6 +19,7 @@ pspat_cli_push(struct pspat_queue *pq, struct sk_buff *skb)
 	struct pspat_mailbox *m;
 	int err;
 
+	/* make sure the per-client mailbox exists */
 	if (unlikely(current->pspat_mb == NULL)) {
 		err = pspat_create_client_queue();
 		if (err)
@@ -35,9 +38,14 @@ pspat_cli_push(struct pspat_queue *pq, struct sk_buff *skb)
 	err = pspat_mb_insert(m, skb);
 	if (err)
 		return err;
-	/* avoid duplicate notification */
+	/* if m is not the last entry in the per-cpu mailbox,
+	 * insert it so that the arbiter will see the new skb
+	 *
+	 * The barrier is necessary to propagate the above
+	 * skb insert to the arbiter.
+	 */
 	if (pq->cli_last_mb != m) {
-		smp_mb(); /* let the arbiter see the insert above */
+		smp_mb();
 		err = pspat_mb_insert(pq->inq, m);
 		if (err)
 			return err;
@@ -77,7 +85,10 @@ pspat_arb_fetch(struct pspat_queue *pq)
 	return !pspat_mb_empty(m);
 }
 
-/* extract skb from the local queue */
+/* extract the next skb from the per-cpu queues
+ * This is done by draining the active per-client
+ * mailboxes associated to this cpu
+ */
 static struct sk_buff *
 pspat_arb_get_skb(struct pspat_queue *pq)
 {
@@ -85,7 +96,7 @@ pspat_arb_get_skb(struct pspat_queue *pq)
 	struct sk_buff *skb;
 
 retry:
-	/* first, get the current mailbox fro this cpu */
+	/* first, get the current mailbox for this cpu */
 	m = pspat_arb_get_mb(pq);
 	if (m == NULL)
 		return NULL;
