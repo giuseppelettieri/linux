@@ -55,6 +55,36 @@ pspat_cli_push(struct pspat_queue *pq, struct sk_buff *skb)
 	return 0;
 }
 
+int
+pspat_client_handler(struct sk_buff *skb, struct Qdisc *q,
+	              struct net_device *dev, struct netdev_queue *txq)
+{
+	int cpu, rc = NET_XMIT_SUCCESS;
+	struct pspat_queue *pq;
+	struct pspat *arb;
+
+	if (!pspat_enable || (arb = rcu_dereference(pspat_arb)) == NULL) {
+		/* Not our business. */
+		return -ENOTTY;
+	}
+
+	qdisc_calculate_pkt_len(skb, q);
+	cpu = get_cpu(); /* also disables preemption */
+	pq = arb->queues + cpu;
+	if (pspat_cli_push(pq, skb)) {
+		pspat_stats[cpu].inq_drop++;
+		kfree_skb(skb);
+		rc = NET_XMIT_DROP;
+	}
+	put_cpu();
+	if (unlikely(pspat_debug_xmit)) {
+		printk("cli_push(%p) --> %d\n", skb, rc);
+	}
+	return rc;
+}
+
+
+
 static struct pspat_mailbox *
 pspat_arb_get_mb(struct pspat_queue *pq)
 {
@@ -440,34 +470,6 @@ pspat_shutdown(struct pspat *arb)
 		q->pspat_owned = 0;
 		*_q = NULL;
 	}
-}
-
-int
-pspat_client_handler(struct sk_buff *skb, struct Qdisc *q,
-	              struct net_device *dev, struct netdev_queue *txq)
-{
-	int cpu, rc = NET_XMIT_SUCCESS;
-	struct pspat_queue *pq;
-	struct pspat *arb;
-
-	if (!pspat_enable || (arb = rcu_dereference(pspat_arb)) == NULL) {
-		/* Not our business. */
-		return -ENOTTY;
-	}
-
-	qdisc_calculate_pkt_len(skb, q);
-	cpu = get_cpu(); /* also disables preemption */
-	pq = arb->queues + cpu;
-	if (pspat_cli_push(pq, skb)) {
-		pspat_stats[cpu].inq_drop++;
-		kfree_skb(skb);
-		rc = NET_XMIT_DROP;
-	}
-	put_cpu();
-	if (unlikely(pspat_debug_xmit)) {
-		printk("cli_push(%p) --> %d\n", skb, rc);
-	}
-	return rc;
 }
 
 void
