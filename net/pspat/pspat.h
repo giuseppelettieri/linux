@@ -37,7 +37,7 @@ struct pspat_queue {
 
 	/* arbiter fields */
 	START_NEW_CACHELINE
-	s64			arb_extract_next;
+	u64			arb_extract_next;
 	struct pspat_mailbox   *arb_last_mb;
 	struct list_head	mb_to_clear;
 };

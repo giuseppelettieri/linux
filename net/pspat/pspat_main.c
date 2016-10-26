@@ -30,7 +30,7 @@ int pspat_xmit_mode = PSPAT_XMIT_MODE_ARB;
 int pspat_single_txq = 1; /* use only one hw queue */
 int pspat_tc_bypass = 0;
 u64 pspat_rate = 40000000000; // 40Gb/s
-s64 pspat_arb_interval_ns = 1000;
+u64 pspat_arb_interval_ns = 1000;
 u32 pspat_qdisc_batch_limit = 40;
 
 u64 pspat_arb_tc_enq_drop = 0;

@@ -225,7 +225,7 @@ int
 pspat_do_arbiter(struct pspat *arb)
 {
 	int i, notempty;
-	s64 now = ktime_get_ns() << 10;
+	u64 now = ktime_get_ns() << 10;
 	struct Qdisc *q = &arb->bypass_qdisc;
 	struct netdev_queue *txq_cursor, *txq_next;
 
@@ -240,7 +240,7 @@ pspat_do_arbiter(struct pspat *arb)
 		struct pspat_queue *pq = arb->queues + i;
 		struct sk_buff *skb;
 
-		if (now < pq->arb_extract_next) {
+		if (now < pq->arb_extract_next) { // XXX fix for wrap around
 			continue;
 		}
 		pq->arb_extract_next = now + (pspat_arb_interval_ns << 10);
