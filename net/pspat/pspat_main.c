@@ -249,7 +249,6 @@ static int
 pspat_sysctl_init(void)
 {
 	int cpus = num_online_cpus(), i, n;
-	int rc = -ENOMEM;
 	struct ctl_table *t, *leaves;
 	void *buf;
 	char *name;
@@ -311,7 +310,7 @@ free_rounds:
 free_stats:
 	free_page((unsigned long)pspat_stats);
 out:
-	return rc;
+	return -ENOMEM;
 }
 
 static void
