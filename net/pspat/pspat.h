@@ -84,7 +84,7 @@ extern int pspat_xmit_mode;
 extern int pspat_single_txq;		/* force a single txq to the device */
 extern int pspat_tc_bypass;		/* performance testing. 0 for normal ops */
 extern u64 pspat_rate;			/* link rate. XXX inherit from TC */
-extern s64 pspat_arb_interval_ns;	/* scan interval for input queues */
+extern u64 pspat_arb_interval_ns;	/* scan interval for input queues */
 	/* The interval should be in the 1000-5000 ns range */
 extern u32 pspat_qdisc_batch_limit;	/* dequeue batch */
 
