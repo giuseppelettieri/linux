@@ -6,6 +6,8 @@
 
 #define START_NEW_CACHELINE	____cacheline_aligned_in_smp
 
+// XXX describe the data structure
+
 struct pspat_mailbox {
 	/* shared (constant) fields */
 	unsigned long		entry_mask;
@@ -131,6 +133,8 @@ static inline void *pspat_mb_extract(struct pspat_mailbox *m)
  * pspat_mb_clear - clear the previously extracted entries
  * @m: the mailbox to be cleared
  *
+ * The side effect of this function is that the producer
+ * will see new free space in the mailbox
  */
 static inline void pspat_mb_clear(struct pspat_mailbox *m)
 {

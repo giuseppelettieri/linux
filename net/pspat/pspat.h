@@ -44,7 +44,7 @@ struct pspat_queue {
 
 struct pspat {
 	struct task_struct	*arb_task;
-	struct task_struct	*snd_task;
+	struct task_struct	*snd_task; // XXX how many?
 
 	/* list of all the qdiscs that we stole from the system */
 	struct Qdisc	       *qdiscs;
@@ -55,6 +55,7 @@ struct pspat {
 	struct pspat_queue	queues[0];
 };
 
+// XXX per-cpu stats, use a sysctl vector
 struct pspat_stats {
 	unsigned long inq_drop;
 } __attribute__((aligned(32)));
@@ -91,7 +92,10 @@ extern u64 pspat_arb_tc_enq_drop;	/* dropped on enqueue */
 extern u64 pspat_arb_tc_deq;		/* dequeued */
 extern u64 pspat_arb_backpressure_drop;	/* ??? */
 extern u64 pspat_xmit_ok;		/* successful transmits */
-extern u64 *pspat_rounds;		/* distribution of batch sizes */
-extern struct pspat_stats *pspat_stats;
+/* pspat_rounds[i] counts the number of times the arbiter has
+ * seen i per-cpu queues not empty in a single round
+ */
+extern u64 *pspat_rounds;
+extern struct pspat_stats *pspat_stats; /* one per cpu */
 
 #endif  /* __PSPAT_H__ */

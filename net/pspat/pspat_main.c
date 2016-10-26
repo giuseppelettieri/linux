@@ -51,6 +51,7 @@ static struct ctl_table_header *pspat_sysctl_hdr;
 static unsigned long pspat_pages;
 
 
+/* wakes up the arbiter and the dispatcher when pspat_enable becomes 1 */
 static int
 pspat_enable_proc_handler(struct ctl_table *table, int write,
 			  void __user *buffer, size_t *lenp, loff_t *ppos)

@@ -5,6 +5,8 @@
 
 #include "pspat.h"
 
+// XXX document pspat_pcpu_queue data structure (client mailboxes etc.)
+
 /* clients send this value on a mailbox when exiting */
 #define PSPAT_LAST_SKB	(void *)0x2
 
