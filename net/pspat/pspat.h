@@ -1,6 +1,27 @@
 #ifndef __PSPAT_H__
 #define __PSPAT_H__
 
+/*
+CODE ROADMAP
+
+PSPAT runs schedulers in a private thread, using one
+lockless, single-producer, single-consumer (LSPSC) queue
+as a mailbox between each thread and the scheduler thread,
+and one 'pspat_queue' per cpu indicating mailboxes with
+potential pending traffic on that CPU.
+
+mailbox.h
+mailbox.c
+	LSPSC queues
+
+pspat.h
+	pspat_queue
+	main descriptor for the pspat object
+	common prototypes.
+
+pspat_main.c
+
+ */
 #include <linux/mailbox.h>
 
 /* per-cpu data structure */
