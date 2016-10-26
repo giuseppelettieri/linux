@@ -22,7 +22,8 @@ pspat.h
 pspat_main.c
 
  */
-#include <linux/mailbox.h>
+
+#include "mailbox.h"
 
 /* per-cpu data structure */
 struct pspat_queue {
