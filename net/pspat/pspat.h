@@ -55,6 +55,10 @@ struct pspat {
 	struct pspat_queue	queues[0];
 };
 
+struct pspat_stats {
+	unsigned long inq_drop;
+} __attribute__((aligned(32)));
+
 extern struct pspat *pspat_arb;
 
 int pspat_do_arbiter(struct pspat *arb);
@@ -67,26 +71,27 @@ int pspat_do_sender(struct pspat *arb);
 
 int pspat_create_client_queue(void);
 
-extern int pspat_enable;
-extern int pspat_debug_xmit;
-#define PSPAT_XMIT_MODE_ARB		0 /* packets sent by the arbiter */
-#define PSPAT_XMIT_MODE_DISPATCH	1 /* packets sent by dispatcher */
-#define PSPAT_XMIT_MODE_MAX		2 /* packets dropped by the arbiter */
-extern int pspat_xmit_mode;
-extern int pspat_tc_bypass;
-extern int pspat_single_txq;
-extern u64 pspat_rate;
-extern s64 pspat_arb_interval_ns;
-extern u64 pspat_arb_tc_enq_drop;
-extern u64 pspat_arb_tc_deq;
-extern u64 pspat_arb_backpressure_drop;
-extern u64 pspat_xmit_ok;
-extern u64 *pspat_rounds;
-extern uint32_t pspat_qdisc_batch_limit;
-extern struct pspat_stats *pspat_stats;
+/* sysctl to control operation of PSPAT */
 
-struct pspat_stats {
-	unsigned long inq_drop;
-} __attribute__((aligned(32)));
+extern int pspat_enable;		/* toggle PSPAT on/off */
+extern int pspat_debug_xmit;
+#define PSPAT_XMIT_MODE_ARB		0 /* PSPAT also transmits */
+#define PSPAT_XMIT_MODE_DISPATCH	1 /* use external dispatcher threads */
+#define PSPAT_XMIT_MODE_MAX		2 /* PSPAT drops (test only) */
+extern int pspat_xmit_mode;
+extern int pspat_single_txq;		/* force a single txq to the device */
+extern int pspat_tc_bypass;		/* performance testing. 0 for normal ops */
+extern u64 pspat_rate;			/* link rate. XXX inherit from TC */
+extern s64 pspat_arb_interval_ns;	/* scan interval for input queues */
+	/* The interval should be in the 1000-5000 ns range */
+extern u32 pspat_qdisc_batch_limit;	/* dequeue batch */
+
+/* some statistics counters (readonly) */
+extern u64 pspat_arb_tc_enq_drop;	/* dropped on enqueue */
+extern u64 pspat_arb_tc_deq;		/* dequeued */
+extern u64 pspat_arb_backpressure_drop;	/* ??? */
+extern u64 pspat_xmit_ok;		/* successful transmits */
+extern u64 *pspat_rounds;		/* distribution of batch sizes */
+extern struct pspat_stats *pspat_stats;
 
 #endif  /* __PSPAT_H__ */

@@ -17,10 +17,13 @@
 #include "pspat.h"
 
 
-DEFINE_MUTEX(pspat_glock);
-struct pspat *pspat_arb;  /* RCU-dereferenced */
-static struct pspat *arbp; /* For internal usage */
+DEFINE_MUTEX(pspat_glock);	/* protects start/stop of kthread */
+struct pspat *pspat_arb;	/* RCU-dereferenced */
+static struct pspat *arbp;	/* For internal usage */
 
+/*
+ * Various sysctl visible in the other files
+ */
 int pspat_enable = 0;
 int pspat_debug_xmit = 0;
 int pspat_xmit_mode = PSPAT_XMIT_MODE_ARB;
@@ -29,6 +32,7 @@ int pspat_tc_bypass = 0;
 u64 pspat_rate = 40000000000; // 40Gb/s
 s64 pspat_arb_interval_ns = 1000;
 u32 pspat_qdisc_batch_limit = 40;
+
 u64 pspat_arb_tc_enq_drop = 0;
 u64 pspat_arb_backpressure_drop = 0;
 u64 pspat_arb_tc_deq = 0;
@@ -36,6 +40,7 @@ u64 pspat_xmit_ok = 0;
 u64 pspat_mailbox_entries = 512;
 u64 pspat_mailbox_line_size = 128;
 u64 *pspat_rounds;
+
 static int pspat_zero = 0;
 static int pspat_one = 1;
 static int pspat_two = 2;
