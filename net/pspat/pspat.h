@@ -7,7 +7,7 @@ CODE ROADMAP
 PSPAT runs schedulers in a private thread, using one
 lockless, single-producer, single-consumer (LSPSC) queue
 as a mailbox between each thread and the scheduler thread,
-and one 'pspat_queue' per cpu indicating mailboxes with
+and one 'pspat_pcpu_queue' per cpu indicating mailboxes with
 potential pending traffic on that CPU.
 
 mailbox.h
@@ -15,7 +15,7 @@ mailbox.c
 	LSPSC queues
 
 pspat.h
-	pspat_queue
+	pspat_pcpu_queue
 	main descriptor for the pspat object
 	common prototypes.
 
@@ -26,7 +26,8 @@ pspat_main.c
 #include "mailbox.h"
 
 /* per-cpu data structure */
-struct pspat_queue {
+// XXX explain how it works
+struct pspat_pcpu_queue {
 	/* Input queue, a mailbox of mailbox pointers.
 	 * written by clients, read by the arbiter. */
 	struct pspat_mailbox   *inq;
@@ -52,7 +53,7 @@ struct pspat {
 	struct Qdisc		bypass_qdisc;
 	struct list_head	active_txqs;
 	int			n_queues;
-	struct pspat_queue	queues[0];
+	struct pspat_pcpu_queue	queues[0];
 };
 
 // XXX per-cpu stats, use a sysctl vector

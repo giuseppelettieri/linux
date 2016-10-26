@@ -16,7 +16,7 @@
  * XXX this is not reentrant
  */
 static int
-pspat_cli_push(struct pspat_queue *pq, struct sk_buff *skb)
+pspat_cli_push(struct pspat_pcpu_queue *pq, struct sk_buff *skb)
 {
 	struct pspat_mailbox *m;
 	int err;
@@ -62,7 +62,7 @@ pspat_client_handler(struct sk_buff *skb, struct Qdisc *q,
 	              struct net_device *dev, struct netdev_queue *txq)
 {
 	int cpu, rc = NET_XMIT_SUCCESS;
-	struct pspat_queue *pq;
+	struct pspat_pcpu_queue *pq;
 	struct pspat *arb;
 
 	if (!pspat_enable || (arb = rcu_dereference(pspat_arb)) == NULL) {
@@ -88,7 +88,7 @@ pspat_client_handler(struct sk_buff *skb, struct Qdisc *q,
 
 
 static struct pspat_mailbox *
-pspat_arb_get_mb(struct pspat_queue *pq)
+pspat_arb_get_mb(struct pspat_pcpu_queue *pq)
 {
 	struct pspat_mailbox *m = pq->arb_last_mb;
 
@@ -109,7 +109,7 @@ pspat_arb_get_mb(struct pspat_queue *pq)
  * any two calls to pspat_arb_fetch
  */
 static int
-pspat_arb_fetch(struct pspat_queue *pq)
+pspat_arb_fetch(struct pspat_pcpu_queue *pq)
 {
 	struct pspat_mailbox *m = pspat_arb_get_mb(pq);
 	if (m == NULL)
@@ -122,7 +122,7 @@ pspat_arb_fetch(struct pspat_queue *pq)
  * mailboxes associated to this cpu
  */
 static struct sk_buff *
-pspat_arb_get_skb(struct pspat_queue *pq)
+pspat_arb_get_skb(struct pspat_pcpu_queue *pq)
 {
 	struct pspat_mailbox *m;
 	struct sk_buff *skb;
@@ -205,7 +205,7 @@ pspat_arb_publish(struct netdev_queue *txq)
 
 /* zero out the used skbs in the client queue */
 static void
-pspat_arb_ack(struct pspat_queue *pq)
+pspat_arb_ack(struct pspat_pcpu_queue *pq)
 {
 	struct pspat_mailbox *mb_cursor, *mb_next;
 
@@ -217,7 +217,7 @@ pspat_arb_ack(struct pspat_queue *pq)
 }
 
 static void
-pspat_arb_drain(struct pspat_queue *pq)
+pspat_arb_drain(struct pspat_pcpu_queue *pq)
 {
 	struct pspat_mailbox *m = pq->arb_last_mb;
 	struct sk_buff *skb;
@@ -280,7 +280,7 @@ pspat_do_arbiter(struct pspat *arb)
 	 */
 	notempty = 0;
 	for (i = 0; i < arb->n_queues; i++) {
-		struct pspat_queue *pq = arb->queues + i;
+		struct pspat_pcpu_queue *pq = arb->queues + i;
 		struct sk_buff *skb;
 
 		if (now < pq->arb_extract_next) { // XXX fix for wrap around
@@ -375,7 +375,7 @@ pspat_do_arbiter(struct pspat *arb)
 	}
 	pspat_rounds[notempty]++;
 	for (i = 0; i < arb->n_queues; i++) {
-		struct pspat_queue *pq = arb->queues + i;
+		struct pspat_pcpu_queue *pq = arb->queues + i;
 		pspat_arb_ack(pq);     /* to clients */
 	}
 	for (q = arb->qdiscs; q; q = q->pspat_next) {
@@ -384,7 +384,7 @@ pspat_do_arbiter(struct pspat *arb)
 		while (q->pspat_next_link_idle <= now &&
 			ndeq < q->pspat_batch_limit)
 		{
-			struct pspat_queue *pq;
+			struct pspat_pcpu_queue *pq;
 			struct sk_buff *skb = q->dequeue(q);
 			// XXX things to do when dequeing:
 			// - q->gso_skb may contain a "requeued"
@@ -457,7 +457,7 @@ pspat_shutdown(struct pspat *arb)
 	 * all dead mailboxes
 	 */
 	for (i = 0; i < arb->n_queues; i++) {
-		struct pspat_queue *pq = arb->queues + i;
+		struct pspat_pcpu_queue *pq = arb->queues + i;
 		struct sk_buff *skb;
 
 		while ( (skb = pspat_arb_get_skb(pq)) ) {
@@ -478,7 +478,7 @@ void
 exit_pspat(void)
 {
 	struct pspat *arb;
-	struct pspat_queue *pq;
+	struct pspat_pcpu_queue *pq;
 	int cpu;
 
 	if (current->pspat_mb == NULL)
