@@ -327,11 +327,6 @@ pspat_sysctl_fini(void)
 		free_page((unsigned long)pspat_stats);
 }
 
-/* Hook exported by net/core/dev.c */
-extern int (*pspat_handler)(struct sk_buff *, struct Qdisc *,
-			    struct net_device *,
-			    struct netdev_queue *);
-
 /* body of the arbiter thread */
 static int
 arb_worker_func(void *data)
