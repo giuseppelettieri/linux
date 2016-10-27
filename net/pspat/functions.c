@@ -101,7 +101,7 @@ pspat_arb_get_mb(struct pspat_pcpu_queue *pq)
 			smp_mb();
 		}
 	}
-	return m;
+	return pq->arb_last_mb;
 }
 
 /* copy new skbs from client queue to local queue
