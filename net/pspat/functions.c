@@ -137,6 +137,8 @@ retry:
 	if (skb) {
 		if (unlikely(skb == PSPAT_LAST_SKB)) {
 			/* special value: the client is gone */
+			if (!list_empty(&m->list))
+				list_del(&m->list);
 			pspat_mb_delete(m);
 			pq->arb_last_mb = NULL;
 			goto retry;
