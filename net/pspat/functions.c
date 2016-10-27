@@ -311,9 +311,7 @@ pspat_do_arbiter(struct pspat *arb)
 			}
 
 			if (unlikely(!q->pspat_owned)) {
-				struct sk_buff *oskb;
 				int can_steal;
-				int j = 0;
 				/* it is the first time we see this Qdisc,
 				 * let us try to steal it from the system
 				 */
@@ -330,17 +328,7 @@ pspat_do_arbiter(struct pspat *arb)
 					continue;
 				}
 
-				if (q->gso_skb) {
-					kfree_skb(q->gso_skb);
-					q->gso_skb = NULL;
-					q->q.qlen--;
-					j ++;
-				}
-				while ((oskb = q->dequeue(q))) {
-					kfree_skb(oskb);
-					j ++;
-				}
-				printk("Stolen qdisc %p, drained %d skbs\n", q, j);
+				printk("Stolen qdisc %p", q);
 
 				/* add to the list of all the Qdiscs we serve
 				 * and initialize the PSPAT-specific fields.
