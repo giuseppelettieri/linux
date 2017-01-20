@@ -336,6 +336,8 @@ arb_worker_func(void *data)
 	while (!kthread_should_stop()) {
 		if (!pspat_enable) {
 			if (arb_registered) {
+                                /* PSPAT is disabled but arbiter is still
+                                 * registered: we need to unregister. */
 				mutex_lock(&pspat_glock);
 				pspat_shutdown(arb);
 				rcu_assign_pointer(pspat_arb, NULL);
@@ -350,7 +352,8 @@ arb_worker_func(void *data)
 
 		} else {
 			if (!arb_registered) {
-				/* Register the arbiter. */
+				/* PSPAT is enabled but arbiter is not
+                                 * registered: we need to register. */
 				mutex_lock(&pspat_glock);
 				rcu_assign_pointer(pspat_arb, arb);
 				synchronize_rcu();
@@ -358,6 +361,7 @@ arb_worker_func(void *data)
 				arb_registered = true;
 				printk("PSPAT arbiter registered\n");
 			}
+
 			pspat_do_arbiter(arb);
 			if (need_resched()) {
 				set_current_state(TASK_INTERRUPTIBLE);
@@ -377,10 +381,10 @@ snd_worker_func(void *data)
 	while (!kthread_should_stop()) {
 		if (pspat_xmit_mode != PSPAT_XMIT_MODE_DISPATCH
 						|| !pspat_enable) {
-			printk("PSPAT dispatcher goes to sleep\n");
+			printk("PSPAT dispatcher deactivated\n");
 			set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
-			printk("PSPAT dispatcher wakes up\n");
+			printk("PSPAT dispatcher activated\n");
 
 		} else {
 			pspat_do_sender(arb);
@@ -464,7 +468,6 @@ pspat_create(void)
 	mb_line_size = pspat_mailbox_line_size;
 	mb_size = pspat_mb_size(mb_entries);
 
-	/* Create the arbiter on demand. */
 	mutex_lock(&pspat_glock);
 	BUG_ON(arbp != NULL);
 

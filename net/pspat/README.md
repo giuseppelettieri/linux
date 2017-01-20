@@ -14,7 +14,7 @@ main.c
 	run the arbiter in-kernel using an ioctl().
 
 pspat.h
-	data structures including struct pspat_queue (one per client)
+	data structures including struct pspat_queue (one per CPU)
 	and struct pspat (one per arbiter, embeds the queues)
 
 uthread.c
