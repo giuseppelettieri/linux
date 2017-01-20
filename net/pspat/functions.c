@@ -85,7 +85,7 @@ pspat_arb_get_skb(struct pspat_queue *pq)
 	struct sk_buff *skb;
 
 retry:
-	/* first, get the current mailbox fro this cpu */
+	/* first, get the current mailbox for this cpu */
 	m = pspat_arb_get_mb(pq);
 	if (m == NULL)
 		return NULL;
@@ -363,7 +363,7 @@ pspat_do_arbiter(struct pspat *arb)
 			q->pspat_next_link_idle +=
 				pspat_pkt_pico(skb->len);
 			ndeq++;
-			BUG_ON(!skb->sender_cpu);
+			BUG_ON(!skb->sender_cpu); /* XXX unused */
 			pq = pspat_arb->queues + skb->sender_cpu - 1;
 			switch (pspat_xmit_mode) {
 			case PSPAT_XMIT_MODE_ARB:
@@ -459,6 +459,7 @@ pspat_client_handler(struct sk_buff *skb, struct Qdisc *q,
 	return rc;
 }
 
+/* Called on process exit() to clean-up PSPAT mailbox, if any. */
 void
 exit_pspat(void)
 {
@@ -473,9 +474,9 @@ retry:
 	rcu_read_lock();
 	arb = rcu_dereference(pspat_arb);
 	if (arb) {
-		/* if the arbiter is running, we cannot delete the mailbox
+		/* If the arbiter is running, we cannot delete the mailbox
 		 * by ourselves. Instead, we send the PSPAT_LAST_SKB to
-		 * notifiy the arbiter of our departure
+		 * notify the arbiter of our departure.
 		 */
 		cpu = get_cpu();
 		pq = arb->queues + cpu;
@@ -488,15 +489,15 @@ retry:
 	if (current->pspat_mb) {
 		/* the mailbox is still there */
 		if (arb) {
-			/* we failed to push PSPAT_LAST_SKB but the
-			 * arbiter was running. We must try again
+			/* We failed to push PSPAT_LAST_SKB but the
+			 * arbiter was running. We must try again.
 			 */
 			printk("PSPAT Try again to destroy mailbox\n");
 			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(100);
 			goto retry;
 		} else {
-			/* the arbiter is not running. Since
+			/* The arbiter is not running. Since
 			 * pspat_shutdown() drains everything, any
 			 * new arbiter will not see this mailbox.
 			 * Therefore, we can safely free it up.
