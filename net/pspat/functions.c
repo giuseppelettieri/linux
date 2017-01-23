@@ -107,7 +107,7 @@ retry:
 	return skb;
 }
 
-/* locally mark skb as eligible for transmission */
+/* mark skb as eligible for transmission on a netdev_queue */
 static void
 pspat_mark(struct pspat *arb, struct sk_buff *skb)
 {
@@ -204,6 +204,13 @@ pspat_arb_send(struct netdev_queue *txq)
 	struct sk_buff *skb = txq->pspat_markq_head;
 	int ret = NETDEV_TX_BUSY;
 
+	/* reset markq pointers */
+	txq->pspat_markq_head = txq->pspat_markq_tail = NULL;
+
+	/* Validate all the skbs in the markq. Some (or all) the skbs may be
+	 * dropped. */
+	skb = validate_xmit_skb_list(skb, dev);
+
 	HARD_TX_LOCK(dev, txq, smp_processor_id());
 	if (!netif_xmit_frozen_or_stopped(txq))
 		skb = dev_hard_start_xmit(skb, dev, txq, &ret);
@@ -217,7 +224,6 @@ pspat_arb_send(struct netdev_queue *txq)
 	} else {
 		pspat_xmit_ok ++;
 	}
-	txq->pspat_markq_head = txq->pspat_markq_tail = NULL;
 }
 
 /* Function implementing the arbiter. */
@@ -367,12 +373,9 @@ pspat_do_arbiter(struct pspat *arb)
 			pq = pspat_arb->queues + skb->sender_cpu - 1;
 			switch (pspat_xmit_mode) {
 			case PSPAT_XMIT_MODE_ARB:
-				skb = validate_xmit_skb_list(skb, skb->dev);
-				/* fallthrough */
-			case PSPAT_XMIT_MODE_DISPATCH:
-				/* validation is done in the sender threads */
 				pspat_mark(arb, skb);
 				break;
+			case PSPAT_XMIT_MODE_DISPATCH:
 			default:
 				kfree_skb(skb);
 				break;
