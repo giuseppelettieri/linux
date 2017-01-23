@@ -107,9 +107,10 @@ retry:
 	return skb;
 }
 
-/* mark skb as eligible for transmission on a netdev_queue */
+/* mark skb as eligible for transmission on a netdev_queue, and
+ * make sure this queue is part of the list of active queues */
 static void
-pspat_mark(struct pspat *arb, struct sk_buff *skb)
+pspat_mark(struct list_head *active_queues, struct sk_buff *skb)
 {
 	struct netdev_queue *txq = skb_get_tx_queue(skb->dev, skb);
 
@@ -121,7 +122,7 @@ pspat_mark(struct pspat *arb, struct sk_buff *skb)
 	}
 	txq->pspat_markq_tail = skb;
 	if (list_empty(&txq->pspat_active)) {
-		list_add_tail(&txq->pspat_active, &arb->active_txqs);
+		list_add_tail(&txq->pspat_active, active_queues);
 	}
 }
 
@@ -363,7 +364,7 @@ pspat_do_arbiter(struct pspat *arb)
 
 			switch (pspat_xmit_mode) {
 			case PSPAT_XMIT_MODE_ARB:
-				pspat_mark(arb, skb);
+				pspat_mark(&arb->active_txqs, skb);
 				break;
 			case PSPAT_XMIT_MODE_DISPATCH:
 				pspat_arb_dispatch(arb, skb);
@@ -506,19 +507,26 @@ pspat_do_sender(struct pspat *arb)
 {
 	struct netdev_queue *txq_cursor, *txq_next;
 	struct pspat_mailbox *m = arb->snd_mbs[0];
+	struct list_head active_txqs;
 	struct sk_buff *skb;
 	int nsent = 0;
 
+	INIT_LIST_HEAD(&active_txqs);
+
 	while (nsent < 256 && (skb = pspat_mb_extract(m)) != NULL) {
-		pspat_mark(arb, skb);
+		pspat_mark(&active_txqs, skb);
 		nsent ++;
 	}
 
 	pspat_mb_clear(m);
 
-	list_for_each_entry_safe(txq_cursor, txq_next, &arb->active_txqs, pspat_active) {
+	list_for_each_entry_safe(txq_cursor, txq_next, &active_txqs, pspat_active) {
 		pspat_txq_flush(txq_cursor);
 		list_del_init(&txq_cursor->pspat_active);
+	}
+
+	if (unlikely(pspat_debug_xmit && nsent)) {
+		printk("PSPAT sender processed %d skbs\n", nsent);
 	}
 
 	return nsent;

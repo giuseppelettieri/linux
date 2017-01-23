@@ -30,10 +30,11 @@ struct pspat {
 	struct Qdisc		bypass_qdisc;
 
 	/* list of all netdev_queue on which we are actively
-	 * transmitting */
+	 * transmitting (used with PSPAT_XMIT_MODE_ARB) */
 	struct list_head	active_txqs;
 
-	/* mailboxes between the arbiter and the senders */
+	/* mailboxes between the arbiter and the senders
+	 * (used with PSPAT_XMIT_MODE_DISPATCH) */
 	struct pspat_mailbox	*snd_mbs[1];
 
 	/* mailboxes between clients and the arbiter */
