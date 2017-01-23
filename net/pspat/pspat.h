@@ -28,7 +28,15 @@ struct pspat {
 	struct Qdisc	       *qdiscs;
 
 	struct Qdisc		bypass_qdisc;
+
+	/* list of all netdev_queue on which we are actively
+	 * transmitting */
 	struct list_head	active_txqs;
+
+	/* mailboxes between the arbiter and the senders */
+	struct pspat_mailbox	*snd_mbs[1];
+
+	/* mailboxes between clients and the arbiter */
 	int			n_queues;
 	struct pspat_queue	queues[0];
 };

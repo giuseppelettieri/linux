@@ -111,12 +111,7 @@ retry:
 static void
 pspat_mark(struct pspat *arb, struct sk_buff *skb)
 {
-	struct netdev_queue *txq;
-
-	if (pspat_single_txq) {
-		skb_set_queue_mapping(skb, 0);
-	}
-	txq = skb_get_tx_queue(skb->dev, skb);
+	struct netdev_queue *txq = skb_get_tx_queue(skb->dev, skb);
 
 	BUG_ON(skb->next);
 	if (txq->pspat_markq_tail) {
@@ -130,34 +125,19 @@ pspat_mark(struct pspat *arb, struct sk_buff *skb)
 	}
 }
 
-static uint64_t
-pspat_pkt_pico(unsigned int len)
+/* move skb to the a sender queue */
+static int
+pspat_arb_dispatch(struct pspat *arb, struct sk_buff *skb)
 {
-	return ((8 * (NSEC_PER_SEC << 10)) * len) / pspat_rate;
-}
+	struct pspat_mailbox *m = arb->snd_mbs[0];
+	int err;
 
-/* copy new skbs to the sender queue */
-static void
-pspat_arb_publish(struct netdev_queue *txq)
-{
-#if 0
-	uint32_t tail = pq->arb_outq_tail;
-	struct sk_buff *skb, *next;
-
-	for (skb = txq->mark_queue_head; skb; skb = next) {
-		next = skb->next;
-		skb->next = NULL;
-		if (likely(pq->outq[tail] == NULL)) {
-			pq->outq[tail] = pq->markq[head];
-		} else {
-			kfree_skb(pq->markq[head]);
-			// XXX increment dropped counter
-		}
-		
-		pspat_next(tail);
+	err = pspat_mb_insert(m, skb);
+	if (err) {
+		kfree_skb(skb);
 	}
-	pq->arb_outq_tail = tail;
-#endif
+
+	return err;
 }
 
 /* zero out the used skbs in the client queue */
@@ -166,8 +146,7 @@ pspat_arb_ack(struct pspat_queue *pq)
 {
 	struct pspat_mailbox *mb_cursor, *mb_next;
 
-	list_for_each_entry_safe(mb_cursor, mb_next,
-			&pq->mb_to_clear, list) {
+	list_for_each_entry_safe(mb_cursor, mb_next, &pq->mb_to_clear, list) {
 		pspat_mb_clear(mb_cursor);
 		list_del_init(&mb_cursor->list);
 	}
@@ -198,7 +177,7 @@ pspat_arb_drain(struct pspat_queue *pq)
 }
 
 static void
-pspat_arb_send(struct netdev_queue *txq)
+pspat_txq_flush(struct netdev_queue *txq)
 {
 	struct net_device *dev = txq->dev;
 	struct sk_buff *skb = txq->pspat_markq_head;
@@ -224,6 +203,12 @@ pspat_arb_send(struct netdev_queue *txq)
 	} else {
 		pspat_xmit_ok ++;
 	}
+}
+
+static uint64_t
+pspat_pkt_pico(unsigned int len)
+{
+	return ((8 * (NSEC_PER_SEC << 10)) * len) / pspat_rate;
 }
 
 /* Function implementing the arbiter. */
@@ -371,11 +356,18 @@ pspat_do_arbiter(struct pspat *arb)
 			ndeq++;
 			BUG_ON(!skb->sender_cpu); /* XXX unused */
 			pq = pspat_arb->queues + skb->sender_cpu - 1;
+
+			if (pspat_single_txq) { /* possibly override txq */
+				skb_set_queue_mapping(skb, 0);
+			}
+
 			switch (pspat_xmit_mode) {
 			case PSPAT_XMIT_MODE_ARB:
 				pspat_mark(arb, skb);
 				break;
 			case PSPAT_XMIT_MODE_DISPATCH:
+				pspat_arb_dispatch(arb, skb);
+				break;
 			default:
 				kfree_skb(skb);
 				break;
@@ -391,13 +383,10 @@ pspat_do_arbiter(struct pspat *arb)
                 }
 	}
 
-	if (pspat_xmit_mode < PSPAT_XMIT_MODE_MAX) {
+	if (pspat_xmit_mode == PSPAT_XMIT_MODE_ARB) {
 		list_for_each_entry_safe(txq_cursor, txq_next,
 				&arb->active_txqs, pspat_active) {
-			if (pspat_xmit_mode == PSPAT_XMIT_MODE_ARB)
-				pspat_arb_send(txq_cursor);
-			else
-				pspat_arb_publish(txq_cursor);
+			pspat_txq_flush(txq_cursor);
 			list_del_init(&txq_cursor->pspat_active);
 		}
 	}
@@ -511,9 +500,26 @@ retry:
 	}
 }
 
-/* Function implementing the transmitter. */
+/* Body of the sender. */
 int
 pspat_do_sender(struct pspat *arb)
 {
-	return 0;
+	struct netdev_queue *txq_cursor, *txq_next;
+	struct pspat_mailbox *m = arb->snd_mbs[0];
+	struct sk_buff *skb;
+	int nsent = 0;
+
+	while (nsent < 256 && (skb = pspat_mb_extract(m)) != NULL) {
+		pspat_mark(arb, skb);
+		nsent ++;
+	}
+
+	pspat_mb_clear(m);
+
+	list_for_each_entry_safe(txq_cursor, txq_next, &arb->active_txqs, pspat_active) {
+		pspat_txq_flush(txq_cursor);
+		list_del_init(&txq_cursor->pspat_active);
+	}
+
+	return nsent;
 }

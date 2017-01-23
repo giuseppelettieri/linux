@@ -458,6 +458,7 @@ static int
 pspat_create(void)
 {
 	int cpus = num_online_cpus(), i;
+	int senders = 1;
 	struct pspat_mailbox *m;
 	unsigned long mb_entries, mb_line_size;
 	size_t mb_size, arb_size;
@@ -472,8 +473,9 @@ pspat_create(void)
 	BUG_ON(arbp != NULL);
 
 	arb_size = roundup(sizeof(*arbp) + cpus * sizeof(*arbp->queues),
-			INTERNODE_CACHE_BYTES);
-	pspat_pages = DIV_ROUND_UP(arb_size + mb_size * cpus, PAGE_SIZE);
+				INTERNODE_CACHE_BYTES);
+	pspat_pages = DIV_ROUND_UP(arb_size + mb_size * (cpus + senders),
+				PAGE_SIZE);
 
 	arbp = (struct pspat *)__get_free_pages(GFP_KERNEL, order_base_2(pspat_pages));
 	if (!arbp) {
@@ -492,6 +494,15 @@ pspat_create(void)
 		}
 		arbp->queues[i].inq = m;
 		INIT_LIST_HEAD(&arbp->queues[i].mb_to_clear);
+		m = (void *)m + mb_size;
+	}
+
+	for (i = 0; i < senders; i++) {
+		ret = pspat_mb_init(m, mb_entries, mb_line_size);
+		if (ret ) {
+			goto fail;
+		}
+		arbp->snd_mbs[i] = m;
 		m = (void *)m + mb_size;
 	}
 
