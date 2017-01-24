@@ -514,8 +514,6 @@ pspat_create(void)
 	arbp->bypass_qdisc.state = 0;
 	arbp->bypass_qdisc.__state = 0;
 
-	INIT_LIST_HEAD(&arbp->active_txqs);
-
 	arbp->arb_task = kthread_create(arb_worker_func, arbp, "pspat-arb");
 	if (IS_ERR(arbp->arb_task)) {
 		ret = -PTR_ERR(arbp->arb_task);

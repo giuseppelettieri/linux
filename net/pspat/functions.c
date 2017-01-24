@@ -213,7 +213,7 @@ pspat_txqs_flush(struct list_head *txqs)
 
 	list_for_each_entry_safe(txq, txq_next, txqs, pspat_active) {
 		pspat_txq_flush(txq);
-		list_del_init(&txq->pspat_active);
+		INIT_LIST_HEAD(&txq->pspat_active);
 	}
 }
 
@@ -230,6 +230,9 @@ pspat_do_arbiter(struct pspat *arb)
 	int i, notempty;
 	s64 now = ktime_get_ns() << 10;
 	struct Qdisc *q = &arb->bypass_qdisc;
+	/* list of all netdev_queue on which we are actively
+	 * transmitting */
+	struct list_head active_txqs;
 
 	rcu_read_lock_bh();
 
@@ -337,6 +340,7 @@ pspat_do_arbiter(struct pspat *arb)
 		struct pspat_queue *pq = arb->queues + i;
 		pspat_arb_ack(pq);     /* to clients */
 	}
+	INIT_LIST_HEAD(&active_txqs);
 	for (q = arb->qdiscs; q; q = q->pspat_next) {
 		int ndeq = 0;
 
@@ -374,7 +378,7 @@ pspat_do_arbiter(struct pspat *arb)
 
 			switch (pspat_xmit_mode) {
 			case PSPAT_XMIT_MODE_ARB:
-				pspat_mark(&arb->active_txqs, skb);
+				pspat_mark(&active_txqs, skb);
 				break;
 			case PSPAT_XMIT_MODE_DISPATCH:
 				pspat_arb_dispatch(arb, skb);
@@ -395,7 +399,7 @@ pspat_do_arbiter(struct pspat *arb)
 	}
 
 	if (pspat_xmit_mode == PSPAT_XMIT_MODE_ARB) {
-		pspat_txqs_flush(&arb->active_txqs);
+		pspat_txqs_flush(&active_txqs);
 	}
 
 	rcu_read_unlock_bh();
