@@ -33,7 +33,7 @@ u64 pspat_arb_tc_enq_drop = 0;
 u64 pspat_arb_backpressure_drop = 0;
 u64 pspat_arb_tc_deq = 0;
 u64 pspat_arb_dispatch_drop = 0;
-u64 pspat_xmit_ok = 0;
+u64 pspat_snd_deq = 0;
 u64 pspat_mailbox_entries = 512;
 u64 pspat_mailbox_line_size = 128;
 u64 *pspat_rounds;
@@ -201,10 +201,10 @@ static struct ctl_table pspat_static_ctl[] = {
 		.extra2		= &pspat_ulongmax,
 	},
 	{
-		.procname	= "xmit_ok",
+		.procname	= "snd_deq",
 		.maxlen		= sizeof(u64),
 		.mode		= 0444,
-		.data		= &pspat_xmit_ok,
+		.data		= &pspat_snd_deq,
 		.proc_handler	= &proc_doulongvec_minmax,
 		.extra1		= &pspat_ulongzero,
 		.extra2		= &pspat_ulongmax,

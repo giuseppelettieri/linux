@@ -1,6 +1,6 @@
 #!/bin/sh
 
-varname="xmit_ok"
+varname="arb_tc_deq"
 if [ -n "$1" ]; then
 	varname="$1"
 fi

@@ -202,11 +202,6 @@ pspat_txq_flush(struct netdev_queue *txq)
 	if (!dev_xmit_complete(ret)) {
 		// XXX we should requeue into the qdisc
 		kfree_skb_list(skb);
-	} else {
-		/* This does not count the number of packets,
-		 * but the number of calls do the start_xmit
-		 * driver callback. */
-		pspat_xmit_ok ++;
 	}
 }
 
@@ -533,6 +528,8 @@ pspat_do_sender(struct pspat *arb)
 
 	pspat_mb_clear(m);
 	pspat_txqs_flush(&active_txqs);
+
+	pspat_snd_deq += nsent;
 
 	if (unlikely(pspat_debug_xmit && nsent)) {
 		printk("PSPAT sender processed %d skbs\n", nsent);
