@@ -28,7 +28,9 @@ pspat_cli_push(struct pspat_queue *pq, struct sk_buff *skb)
          * We return an error to propagate the overrun to the client. */
 	if (unlikely(m->backpressure)) {
 		m->backpressure = 0;
-		printk("mailbox %p backpressure\n", m);
+		if (pspat_debug_xmit) {
+			printk("mailbox %p backpressure\n", m);
+		}
 		return -ENOBUFS;
 	}
 
@@ -135,6 +137,19 @@ pspat_arb_dispatch(struct pspat *arb, struct sk_buff *skb)
 
 	err = pspat_mb_insert(m, skb);
 	if (err) {
+		/* Drop this skb and possibly set the backpressure
+		 * flag for the last client on the per-CPU queue
+		 * where this skb was transmitted. */
+		struct pspat_mailbox *cli_mb;
+		struct pspat_queue *pq;
+
+		BUG_ON(!skb->sender_cpu);
+		pq = pspat_arb->queues + skb->sender_cpu - 1;
+		cli_mb = pq->arb_last_mb;
+
+		if (cli_mb && !cli_mb->backpressure) {
+			cli_mb->backpressure = 1;
+		}
 		pspat_arb_dispatch_drop ++;
 		kfree_skb(skb);
 	}
@@ -346,7 +361,6 @@ pspat_do_arbiter(struct pspat *arb)
 		while (q->pspat_next_link_idle <= now &&
 			ndeq < q->pspat_batch_limit)
 		{
-			struct pspat_queue *pq;
 			struct sk_buff *skb = q->dequeue(q);
 			// XXX things to do when dequeing:
 			// - q->gso_skb may contain a "requeued"
@@ -365,11 +379,8 @@ pspat_do_arbiter(struct pspat *arb)
 			if (unlikely(pspat_debug_xmit)) {
 				printk("deq(%p)-->%p\n", q, skb);
 			}
-			q->pspat_next_link_idle +=
-				pspat_pkt_pico(skb->len);
+			q->pspat_next_link_idle += pspat_pkt_pico(skb->len);
 			ndeq++;
-			BUG_ON(!skb->sender_cpu); /* XXX unused */
-			pq = pspat_arb->queues + skb->sender_cpu - 1;
 
 			if (pspat_single_txq) { /* possibly override txq */
 				skb_set_queue_mapping(skb, 0);
