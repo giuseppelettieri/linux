@@ -177,7 +177,7 @@ pspat_arb_drain(struct pspat_queue *pq)
 	pspat_arb_backpressure_drop += dropped;
 }
 
-static void
+static inline void
 pspat_txq_flush(struct netdev_queue *txq)
 {
 	struct net_device *dev = txq->dev;
@@ -206,6 +206,17 @@ pspat_txq_flush(struct netdev_queue *txq)
 	}
 }
 
+static void
+pspat_txqs_flush(struct list_head *txqs)
+{
+	struct netdev_queue *txq, *txq_next;
+
+	list_for_each_entry_safe(txq, txq_next, txqs, pspat_active) {
+		pspat_txq_flush(txq);
+		list_del_init(&txq->pspat_active);
+	}
+}
+
 static uint64_t
 pspat_pkt_pico(unsigned int len)
 {
@@ -219,7 +230,6 @@ pspat_do_arbiter(struct pspat *arb)
 	int i, notempty;
 	s64 now = ktime_get_ns() << 10;
 	struct Qdisc *q = &arb->bypass_qdisc;
-	struct netdev_queue *txq_cursor, *txq_next;
 
 	rcu_read_lock_bh();
 
@@ -385,11 +395,7 @@ pspat_do_arbiter(struct pspat *arb)
 	}
 
 	if (pspat_xmit_mode == PSPAT_XMIT_MODE_ARB) {
-		list_for_each_entry_safe(txq_cursor, txq_next,
-				&arb->active_txqs, pspat_active) {
-			pspat_txq_flush(txq_cursor);
-			list_del_init(&txq_cursor->pspat_active);
-		}
+		pspat_txqs_flush(&arb->active_txqs);
 	}
 
 	rcu_read_unlock_bh();
@@ -505,7 +511,6 @@ retry:
 int
 pspat_do_sender(struct pspat *arb)
 {
-	struct netdev_queue *txq_cursor, *txq_next;
 	struct pspat_mailbox *m = arb->snd_mbs[0];
 	struct list_head active_txqs;
 	struct sk_buff *skb;
@@ -519,11 +524,7 @@ pspat_do_sender(struct pspat *arb)
 	}
 
 	pspat_mb_clear(m);
-
-	list_for_each_entry_safe(txq_cursor, txq_next, &active_txqs, pspat_active) {
-		pspat_txq_flush(txq_cursor);
-		list_del_init(&txq_cursor->pspat_active);
-	}
+	pspat_txqs_flush(&active_txqs);
 
 	if (unlikely(pspat_debug_xmit && nsent)) {
 		printk("PSPAT sender processed %d skbs\n", nsent);
