@@ -32,6 +32,7 @@ u32 pspat_qdisc_batch_limit = 40;
 u64 pspat_arb_tc_enq_drop = 0;
 u64 pspat_arb_backpressure_drop = 0;
 u64 pspat_arb_tc_deq = 0;
+u64 pspat_arb_dispatch_drop = 0;
 u64 pspat_xmit_ok = 0;
 u64 pspat_mailbox_entries = 512;
 u64 pspat_mailbox_line_size = 128;
@@ -186,6 +187,15 @@ static struct ctl_table pspat_static_ctl[] = {
 		.maxlen		= sizeof(u64),
 		.mode		= 0444,
 		.data		= &pspat_arb_tc_deq,
+		.proc_handler	= &proc_doulongvec_minmax,
+		.extra1		= &pspat_ulongzero,
+		.extra2		= &pspat_ulongmax,
+	},
+	{
+		.procname	= "arb_dispatch_drop",
+		.maxlen		= sizeof(u64),
+		.mode		= 0444,
+		.data		= &pspat_arb_dispatch_drop,
 		.proc_handler	= &proc_doulongvec_minmax,
 		.extra1		= &pspat_ulongzero,
 		.extra2		= &pspat_ulongmax,

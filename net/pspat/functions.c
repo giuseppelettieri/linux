@@ -135,6 +135,7 @@ pspat_arb_dispatch(struct pspat *arb, struct sk_buff *skb)
 
 	err = pspat_mb_insert(m, skb);
 	if (err) {
+		pspat_arb_dispatch_drop ++;
 		kfree_skb(skb);
 	}
 
@@ -202,6 +203,9 @@ pspat_txq_flush(struct netdev_queue *txq)
 		// XXX we should requeue into the qdisc
 		kfree_skb_list(skb);
 	} else {
+		/* This does not count the number of packets,
+		 * but the number of calls do the start_xmit
+		 * driver callback. */
 		pspat_xmit_ok ++;
 	}
 }
