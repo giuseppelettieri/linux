@@ -1471,8 +1471,6 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 	unsigned int received;
 	unsigned int xdp_xmit = 0;
 
-	virtnet_poll_cleantx(rq);
-
 #ifdef DEV_NETMAP
         int work_done = 0;
 	struct virtnet_info *vi = rq->vq->vdev->priv;
@@ -1485,6 +1483,8 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 		return budget;
 	}
 #endif
+
+	virtnet_poll_cleantx(rq);
 
 	received = virtnet_receive(rq, budget, &xdp_xmit);
 
