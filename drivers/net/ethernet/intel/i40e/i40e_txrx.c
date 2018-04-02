@@ -2329,17 +2329,17 @@ static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget)
 	bool failure = false;
 	struct xdp_buff xdp;
 
-#if (PAGE_SIZE < 8192)
-	xdp.frame_sz = i40e_rx_frame_truesize(rx_ring, 0);
-#endif
-	xdp.rxq = &rx_ring->xdp_rxq;
-
 #ifdef DEV_NETMAP
 	int dummy;
 	if (rx_ring->netdev &&
 	    netmap_rx_irq(rx_ring->netdev, rx_ring->queue_index, &dummy) != NM_IRQ_PASS)
 		return 1;
 #endif /* DEV_NETMAP */
+
+#if (PAGE_SIZE < 8192)
+	xdp.frame_sz = i40e_rx_frame_truesize(rx_ring, 0);
+#endif
+	xdp.rxq = &rx_ring->xdp_rxq;
 
 	while (likely(total_rx_packets < (unsigned int)budget)) {
 		struct i40e_rx_buffer *rx_buffer;
