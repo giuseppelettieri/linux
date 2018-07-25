@@ -1153,8 +1153,6 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 	bool xdp_xmit = false;
 	struct xdp_buff xdp;
 
-	xdp.rxq = &rx_ring->xdp_rxq;
-
 #ifdef DEV_NETMAP
 	/*
 	 * 	 Same as the txeof routine: only wakeup clients on intr.
@@ -1164,6 +1162,8 @@ static int ixgbevf_clean_rx_irq(struct ixgbevf_q_vector *q_vector,
 	if (nm_irq != NM_IRQ_PASS)
 		return (nm_irq == NM_IRQ_RESCHED) ? budget : 1;
 #endif /* DEV_NETMAP */
+
+	xdp.rxq = &rx_ring->xdp_rxq;
 
 	while (likely(total_rx_packets < budget)) {
 		struct ixgbevf_rx_buffer *rx_buffer;
