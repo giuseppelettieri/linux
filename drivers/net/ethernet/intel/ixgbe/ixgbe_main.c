@@ -2336,12 +2336,12 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 		return (nm_irq == NM_IRQ_RESCHED) ? budget : 1;
 #endif /* DEV_NETMAP */
 
+	xdp.rxq = &rx_ring->xdp_rxq;
+
 	/* Frame size depend on rx_ring setup when PAGE_SIZE=4K */
 #if (PAGE_SIZE < 8192)
 	xdp.frame_sz = ixgbe_rx_frame_truesize(rx_ring, 0);
 #endif
-
-	xdp.rxq = &rx_ring->xdp_rxq;
 
 	while (likely(total_rx_packets < budget)) {
 		union ixgbe_adv_rx_desc *rx_desc;
@@ -3592,7 +3592,7 @@ void ixgbe_configure_tx_ring(struct ixgbe_adapter *adapter,
 		txdctl = IXGBE_READ_REG(hw, IXGBE_TXDCTL(reg_idx));
 	} while (--wait_loop && !(txdctl & IXGBE_TXDCTL_ENABLE));
 	if (!wait_loop)
-		e_err(drv, "Could not enable Tx Queue %d\n", reg_idx);
+		hw_dbg(hw, "Could not enable Tx Queue %d\n", reg_idx);
 }
 
 static void ixgbe_setup_mtqc(struct ixgbe_adapter *adapter)
