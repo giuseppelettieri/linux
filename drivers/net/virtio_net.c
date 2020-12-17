@@ -763,12 +763,8 @@ static int virtnet_open(struct net_device *dev)
 #ifdef DEV_NETMAP
 	int ok = virtio_netmap_init_buffers(vi);
 
-	if (ok) {
-		virtnet_napi_enable(vi);
-		return 0;
-	}
+	if (!ok)
 #endif
-
 	/* Make sure we have some buffers: if oom use wq. */
 	if (!try_fill_recv(vi, GFP_KERNEL))
 		queue_delayed_work(system_nrt_wq, &vi->refill, 0);
