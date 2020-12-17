@@ -1501,15 +1501,12 @@ static int virtnet_open(struct net_device *dev)
 	int i, err;
 #ifdef DEV_NETMAP
         int ok = virtio_netmap_init_buffers(vi);
-
-        if (ok) {
-            for (i = 0; i < vi->max_queue_pairs; i++)
-		virtnet_napi_enable(vi->rq[i].vq, &vi->rq[i].napi);
-            return 0;
-        }
 #endif
 
 	for (i = 0; i < vi->max_queue_pairs; i++) {
+#ifdef DEV_NETMAP
+		if (!ok)
+#endif
 		if (i < vi->curr_queue_pairs)
 			/* Make sure we have some buffers: if oom use wq. */
 			if (!try_fill_recv(vi, &vi->rq[i], GFP_KERNEL))
