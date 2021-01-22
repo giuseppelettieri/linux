@@ -8701,13 +8701,6 @@ static int igb_clean_rx_irq(struct igb_q_vector *q_vector, const int budget)
 	unsigned int xdp_xmit = 0;
 	struct xdp_buff xdp;
 
-	xdp.rxq = &rx_ring->xdp_rxq;
-
-	/* Frame size depend on rx_ring setup when PAGE_SIZE=4K */
-#if (PAGE_SIZE < 8192)
-	xdp.frame_sz = igb_rx_frame_truesize(rx_ring, 0);
-#endif
-
 #ifdef DEV_NETMAP
 	/*
 	 * 	 Same as the txeof routine: only wakeup clients on intr.
@@ -8717,6 +8710,14 @@ static int igb_clean_rx_irq(struct igb_q_vector *q_vector, const int budget)
 	if (nm_irq != NM_IRQ_PASS)
 		return (nm_irq == NM_IRQ_RESCHED) ? budget : 1;
 #endif /* DEV_NETMAP */
+
+	xdp.rxq = &rx_ring->xdp_rxq;
+
+	/* Frame size depend on rx_ring setup when PAGE_SIZE=4K */
+#if (PAGE_SIZE < 8192)
+	xdp.frame_sz = igb_rx_frame_truesize(rx_ring, 0);
+#endif
+
 	while (likely(total_packets < budget)) {
 		union e1000_adv_rx_desc *rx_desc;
 		struct igb_rx_buffer *rx_buffer;
