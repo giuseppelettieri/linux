@@ -117,6 +117,9 @@ static void stmmac_exit_fs(struct net_device *dev);
 
 #define STMMAC_COAL_TIMER(x) (jiffies + usecs_to_jiffies(x))
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#include <if_stmmac_netmap_linux.h>
+#endif
 /**
  * stmmac_verify_args - verify the driver parameters.
  * Description: it checks the driver parameters and set a default in case of
@@ -562,9 +565,9 @@ static int stmmac_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 			config.rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_EVENT;
 			/* take time stamp for all event messages */
 			if (priv->plat->has_gmac4)
-				snap_type_sel = PTP_GMAC4_TCR_SNAPTYPSEL_1;
+				snap_type_sel = 0xFFFFFFFF & PTP_GMAC4_TCR_SNAPTYPSEL_1;
 			else
-				snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+				snap_type_sel = 0xFFFFFFFF & PTP_TCR_SNAPTYPSEL_1;
 
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
@@ -597,9 +600,9 @@ static int stmmac_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 			ptp_v2 = PTP_TCR_TSVER2ENA;
 			/* take time stamp for all event messages */
 			if (priv->plat->has_gmac4)
-				snap_type_sel = PTP_GMAC4_TCR_SNAPTYPSEL_1;
+				snap_type_sel = 0xFFFFFFFF & PTP_GMAC4_TCR_SNAPTYPSEL_1;
 			else
-				snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+				snap_type_sel = 0xFFFFFFFF & PTP_TCR_SNAPTYPSEL_1;
 
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
@@ -634,9 +637,9 @@ static int stmmac_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 			ptp_v2 = PTP_TCR_TSVER2ENA;
 			/* take time stamp for all event messages */
 			if (priv->plat->has_gmac4)
-				snap_type_sel = PTP_GMAC4_TCR_SNAPTYPSEL_1;
+				snap_type_sel = 0xFFFFFFFF & PTP_GMAC4_TCR_SNAPTYPSEL_1;
 			else
-				snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+				snap_type_sel = 0xFFFFFFFF & PTP_TCR_SNAPTYPSEL_1;
 
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
@@ -1235,6 +1238,22 @@ static int init_dma_rx_desc_rings(struct net_device *dev, gfp_t flags)
 	netif_dbg(priv, probe, priv->dev,
 		  "SKB addresses:\nskb\t\tskb data\tdma data\n");
 
+#ifdef DEV_NETMAP
+	if (stmmac_netmap_rx_init(priv)) {
+		priv->cur_rx = 0;
+		priv->dirty_rx = 1;
+		buf_sz = bfsize;
+
+		if (stmmac_netmap_tx_init(priv)) {
+			priv->dirty_tx = 0;
+			priv->cur_tx = 0;
+			netdev_reset_queue(priv->dev);
+			return 0;
+		}
+	}
+
+#endif /* DEV_NETMAP */
+
 	for (queue = 0; queue < rx_count; queue++) {
 		struct stmmac_rx_queue *rx_q = &priv->rx_queue[queue];
 
@@ -1820,6 +1839,11 @@ static void stmmac_tx_clean(struct stmmac_priv *priv, u32 queue)
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[queue];
 	unsigned int bytes_compl = 0, pkts_compl = 0;
 	unsigned int entry;
+
+#ifdef DEV_NETMAP
+	if (netmap_tx_irq(priv->dev, 0))
+		return;
+#endif /* DEV_NETMAP */
 
 	netif_tx_lock(priv->dev);
 
@@ -2577,7 +2601,7 @@ static int stmmac_hw_setup(struct net_device *dev, bool init_ptp)
 	}
 
 	if (priv->hw->pcs && priv->hw->mac->pcs_ctrl_ane)
-		priv->hw->mac->pcs_ctrl_ane(priv->hw, 1, priv->hw->ps, 0);
+		priv->hw->mac->pcs_ctrl_ane((void __iomem *)priv->hw, 1, priv->hw->ps, 0);
 
 	/* set TX and RX rings length */
 	stmmac_set_rings_length(priv);
@@ -3348,6 +3372,11 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 	int coe = priv->hw->rx_csum;
 	unsigned int next_entry;
 	unsigned int count = 0;
+
+#ifdef DEV_NETMAP
+	if (netmap_rx_irq(priv->dev, 0, &count))
+		return count;
+#endif /* DEV_NETMAP */
 
 	if (netif_msg_rx_status(priv)) {
 		void *rx_head;
@@ -4313,6 +4342,10 @@ int stmmac_dvr_probe(struct device *device,
 		goto error_netdev_register;
 	}
 
+#ifdef DEV_NETMAP
+	stmmac_netmap_attach(priv);
+#endif /* DEV_NETMAP */
+
 	return ret;
 
 error_netdev_register:
@@ -4359,6 +4392,11 @@ int stmmac_dvr_remove(struct device *dev)
 	    priv->hw->pcs != STMMAC_PCS_TBI &&
 	    priv->hw->pcs != STMMAC_PCS_RTBI)
 		stmmac_mdio_unregister(ndev);
+
+#ifdef DEV_NETMAP
+	netmap_detach(ndev);
+#endif /* DEV_NETMAP */
+
 	free_netdev(ndev);
 
 	return 0;
@@ -4578,8 +4616,8 @@ static void __exit stmmac_exit(void)
 #endif
 }
 
-module_init(stmmac_init)
-module_exit(stmmac_exit)
+module_init(stmmac_init);
+module_exit(stmmac_exit);
 
 MODULE_DESCRIPTION("STMMAC 10/100/1000 Ethernet device driver");
 MODULE_AUTHOR("Giuseppe Cavallaro <peppe.cavallaro@st.com>");
