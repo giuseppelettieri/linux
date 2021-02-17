@@ -113,6 +113,9 @@ static void stmmac_exit_fs(struct net_device *dev);
 
 #define STMMAC_COAL_TIMER(x) (jiffies + usecs_to_jiffies(x))
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#include <if_stmmac_netmap_linux.h>
+#endif
 /**
  * stmmac_verify_args - verify the driver parameters.
  * Description: it checks the driver parameters and set a default in case of
@@ -565,7 +568,7 @@ static int stmmac_hwtstamp_set(struct net_device *dev, struct ifreq *ifr)
 			 * Enable all events *and* general purpose message
 			 * timestamping
 			 */
-			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+			snap_type_sel = 0xFFFFFFFF & PTP_TCR_SNAPTYPSEL_1;
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
 			break;
@@ -596,7 +599,7 @@ static int stmmac_hwtstamp_set(struct net_device *dev, struct ifreq *ifr)
 			config.rx_filter = HWTSTAMP_FILTER_PTP_V2_L4_EVENT;
 			ptp_v2 = PTP_TCR_TSVER2ENA;
 			/* take time stamp for all event messages */
-			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+			snap_type_sel = 0xFFFFFFFF & PTP_TCR_SNAPTYPSEL_1;
 
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
@@ -629,7 +632,7 @@ static int stmmac_hwtstamp_set(struct net_device *dev, struct ifreq *ifr)
 			/* PTP v2/802.AS1 any layer, any kind of event packet */
 			config.rx_filter = HWTSTAMP_FILTER_PTP_V2_EVENT;
 			ptp_v2 = PTP_TCR_TSVER2ENA;
-			snap_type_sel = PTP_TCR_SNAPTYPSEL_1;
+			snap_type_sel = 0xFFFFFFFF & PTP_TCR_SNAPTYPSEL_1;
 			ts_event_en = PTP_TCR_TSEVNTENA;
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
@@ -1310,6 +1313,22 @@ static int init_dma_rx_desc_rings(struct net_device *dev, gfp_t flags)
 	netif_dbg(priv, probe, priv->dev,
 		  "SKB addresses:\nskb\t\tskb data\tdma data\n");
 
+#ifdef DEV_NETMAP
+	if (stmmac_netmap_rx_init(priv)) {
+		priv->cur_rx = 0;
+		priv->dirty_rx = 1;
+		buf_sz = bfsize;
+
+		if (stmmac_netmap_tx_init(priv)) {
+			priv->dirty_tx = 0;
+			priv->cur_tx = 0;
+			netdev_reset_queue(priv->dev);
+			return 0;
+		}
+	}
+
+#endif /* DEV_NETMAP */
+
 	for (queue = 0; queue < rx_count; queue++) {
 		struct stmmac_rx_queue *rx_q = &priv->rx_queue[queue];
 
@@ -1894,6 +1913,11 @@ static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[queue];
 	unsigned int bytes_compl = 0, pkts_compl = 0;
 	unsigned int entry, count = 0;
+
+#ifdef DEV_NETMAP
+	if (netmap_tx_irq(priv->dev, 0))
+		return;
+#endif /* DEV_NETMAP */
 
 	__netif_tx_lock_bh(netdev_get_tx_queue(priv->dev, queue));
 
@@ -3621,6 +3645,11 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 	unsigned int next_entry = rx_q->cur_rx;
 	struct sk_buff *skb = NULL;
 
+#ifdef DEV_NETMAP
+	if (netmap_rx_irq(priv->dev, 0, &count))
+		return count;
+#endif /* DEV_NETMAP */
+
 	if (netif_msg_rx_status(priv)) {
 		void *rx_head;
 
@@ -4904,6 +4933,10 @@ int stmmac_dvr_probe(struct device *device,
 	stmmac_init_fs(ndev);
 #endif
 
+#ifdef DEV_NETMAP
+	stmmac_netmap_attach(priv);
+#endif /* DEV_NETMAP */
+
 	return ret;
 
 error_netdev_register:
@@ -4959,6 +4992,10 @@ int stmmac_dvr_remove(struct device *dev)
 		stmmac_mdio_unregister(ndev);
 	destroy_workqueue(priv->wq);
 	mutex_destroy(&priv->lock);
+
+#ifdef DEV_NETMAP
+	netmap_detach(ndev);
+#endif /* DEV_NETMAP */
 
 	return 0;
 }
@@ -5181,8 +5218,8 @@ static void __exit stmmac_exit(void)
 #endif
 }
 
-module_init(stmmac_init)
-module_exit(stmmac_exit)
+module_init(stmmac_init);
+module_exit(stmmac_exit);
 
 MODULE_DESCRIPTION("STMMAC 10/100/1000 Ethernet device driver");
 MODULE_AUTHOR("Giuseppe Cavallaro <peppe.cavallaro@st.com>");
