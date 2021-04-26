@@ -79,6 +79,10 @@ struct veth_xdp_tx_bq {
 	unsigned int count;
 };
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#include <veth_netmap.h>
+#endif
+
 /*
  * ethtool interface
  */
@@ -1018,7 +1022,6 @@ static int veth_open(struct net_device *dev)
 		netif_carrier_on(dev);
 		netif_carrier_on(peer);
 	}
-
 	return 0;
 }
 
@@ -1080,12 +1083,18 @@ static int veth_dev_init(struct net_device *dev)
 		return err;
 	}
 
+#ifdef DEV_NETMAP
+	veth_netmap_attach(dev);
+#endif /* DEV_NETMAP */
 	return 0;
 }
 
 static void veth_dev_free(struct net_device *dev)
 {
 	veth_free_queues(dev);
+#ifdef DEV_NETMAP
+	netmap_detach(dev);
+#endif /* DEV_NETMAP */
 	free_percpu(dev->lstats);
 }
 
