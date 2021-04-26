@@ -308,6 +308,11 @@ static u32 get_bitfield32(const __le32 *bitfield, u32 pos, u32 size)
 #endif /* __BIG_ENDIAN_BITFIELD  */
 
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE) || defined(DEV_NETMAP)
+#include "if_vmxnet3_netmap_v2.h"
+#endif
+
+
 static void
 vmxnet3_unmap_tx_buf(struct vmxnet3_tx_buf_info *tbi,
 		     struct pci_dev *pdev)
@@ -366,6 +371,13 @@ vmxnet3_tq_tx_complete(struct vmxnet3_tx_queue *tq,
 {
 	int completed = 0;
 	union Vmxnet3_GenericDesc *gdesc;
+
+#ifdef DEV_NETMAP
+	struct net_device *netdev = adapter->netdev;
+
+	if (netmap_tx_irq(netdev, tq - adapter->tx_queue) != NM_IRQ_PASS)
+		return 0;
+#endif
 
 	gdesc = tq->comp_ring.base + tq->comp_ring.next2proc;
 	while (VMXNET3_TCD_GET_GEN(&gdesc->tcd) == tq->comp_ring.gen) {
@@ -492,6 +504,10 @@ vmxnet3_tq_init(struct vmxnet3_tx_queue *tq,
 	memset(tq->buf_info, 0, sizeof(tq->buf_info[0]) * tq->tx_ring.size);
 	for (i = 0; i < tq->tx_ring.size; i++)
 		tq->buf_info[i].map_type = VMXNET3_MAP_NONE;
+
+#ifdef DEV_NETMAP
+	vmxnet3_netmap_tq_config_tx_buf(tq, adapter);
+#endif /* DEV_NETMAP */
 
 	/* stats are not reset */
 }
@@ -1355,6 +1371,15 @@ vmxnet3_rq_rx_complete(struct vmxnet3_rx_queue *rq,
 	struct Vmxnet3_RxDesc rxCmdDesc;
 	struct Vmxnet3_RxCompDesc rxComp;
 #endif
+
+#ifdef DEV_NETMAP
+	u_int total_packets = 0;
+	struct net_device *netdev = adapter->netdev;
+
+	if (netmap_rx_irq(netdev, rq - adapter->rx_queue, &total_packets) != NM_IRQ_PASS)
+		return 1;
+#endif /* DEV_NETMAP */
+
 	vmxnet3_getRxComp(rcd, &rq->comp_ring.base[rq->comp_ring.next2proc].rcd,
 			  &rxComp);
 	while (rcd->gen == rq->comp_ring.gen) {
@@ -1787,12 +1812,18 @@ vmxnet3_rq_init(struct vmxnet3_rx_queue *rq,
 		       sizeof(struct Vmxnet3_RxDesc));
 		rq->rx_ring[i].gen = VMXNET3_INIT_GEN;
 	}
-	if (vmxnet3_rq_alloc_rx_buf(rq, 0, rq->rx_ring[0].size - 1,
-				    adapter) == 0) {
-		/* at least has 1 rx buffer for the 1st ring */
-		return -ENOMEM;
+#ifdef DEV_NETMAP
+	if (!vmxnet3_netmap_rq_config_rx_buf(rq, adapter)) {
+#endif /* DEV_NETMAP */
+		if (vmxnet3_rq_alloc_rx_buf(rq, 0, rq->rx_ring[0].size - 1,
+					    adapter) == 0) {
+			/* at least has 1 rx buffer for the 1st ring */
+			return -ENOMEM;
+		}
+		vmxnet3_rq_alloc_rx_buf(rq, 1, rq->rx_ring[1].size - 1, adapter);
+#ifdef DEV_NETMAP
 	}
-	vmxnet3_rq_alloc_rx_buf(rq, 1, rq->rx_ring[1].size - 1, adapter);
+#endif /* DEV_NETMAP */
 
 	/* reset the comp ring */
 	rq->comp_ring.next2proc = 0;
@@ -1895,7 +1926,11 @@ vmxnet3_rq_create_all(struct vmxnet3_adapter *adapter)
 {
 	int i, err = 0;
 
+#ifdef DEV_NETMAP
+	vmxnet3_netmap_set_rxdataring_enabled(adapter);
+#else
 	adapter->rxdataring_enabled = VMXNET3_VERSION_GE_3(adapter);
+#endif /* DEV_NETMAP */
 
 	for (i = 0; i < adapter->num_rx_queues; i++) {
 		err = vmxnet3_rq_create(&adapter->rx_queue[i], adapter);
@@ -2663,13 +2698,18 @@ vmxnet3_activate_dev(struct vmxnet3_adapter *adapter)
 		adapter->rx_queue[0].rx_ring[0].size,
 		adapter->rx_queue[0].rx_ring[1].size);
 
-	vmxnet3_tq_init_all(adapter);
+#ifdef DEV_NETMAP
+	vmxnet3_netmap_init_buffers(adapter);
+#endif /* DEV_NETMAP */
+
 	err = vmxnet3_rq_init_all(adapter);
 	if (err) {
 		netdev_err(adapter->netdev,
 			   "Failed to init rx queue error %d\n", err);
 		goto rq_err;
 	}
+
+	vmxnet3_tq_init_all(adapter);
 
 	err = vmxnet3_request_irqs(adapter);
 	if (err) {
@@ -2939,7 +2979,12 @@ vmxnet3_create_queues(struct vmxnet3_adapter *adapter, u32 tx_ring_size,
 	adapter->rx_queue[0].rx_ring[1].size = rx_ring2_size;
 	vmxnet3_adjust_rx_ring_size(adapter);
 
+#ifdef DEV_NETMAP
+	vmxnet3_netmap_set_rxdataring_enabled(adapter);
+#else
 	adapter->rxdataring_enabled = VMXNET3_VERSION_GE_3(adapter);
+#endif /* DEV_NETMAP */
+
 	for (i = 0; i < adapter->num_rx_queues; i++) {
 		struct vmxnet3_rx_queue *rq = &adapter->rx_queue[i];
 		/* qid and qid2 for rx queues will be assigned later when num
@@ -3611,6 +3656,11 @@ vmxnet3_probe_device(struct pci_dev *pdev,
 		goto err_register;
 	}
 
+
+#ifdef DEV_NETMAP
+	vmxnet3_netmap_attach(adapter);
+#endif /* DEV_NETMAP */
+
 	vmxnet3_check_link(adapter, false);
 	return 0;
 
@@ -3667,6 +3717,10 @@ vmxnet3_remove_device(struct pci_dev *pdev)
 	cancel_work_sync(&adapter->work);
 
 	unregister_netdev(netdev);
+
+#ifdef DEV_NETMAP
+	vmxnet3_netmap_detach(netdev);
+#endif /* DEV_NETMAP */
 
 	vmxnet3_free_intr_resources(adapter);
 	vmxnet3_free_pci_resources(adapter);
