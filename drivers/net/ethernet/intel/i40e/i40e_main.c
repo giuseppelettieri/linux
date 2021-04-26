@@ -97,6 +97,10 @@ MODULE_DESCRIPTION("Intel(R) Ethernet Connection XL710 Network Driver");
 MODULE_LICENSE("GPL v2");
 
 static struct workqueue_struct *i40e_wq;
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#define NETMAP_I40E_MAIN
+#include <i40e_netmap_linux.h>
+#endif
 
 /**
  * i40e_allocate_dma_mem_d - OS specific memory alloc for shared code
@@ -3256,6 +3260,10 @@ static int i40e_configure_tx_ring(struct i40e_ring *ring)
 	/* cache tail off for easier writes later */
 	ring->tail = hw->hw_addr + I40E_QTX_TAIL(pf_q);
 
+#ifdef DEV_NETMAP
+	i40e_netmap_configure_tx_ring(ring);
+#endif /* DEV_NETMAP */
+
 	return 0;
 }
 
@@ -3346,6 +3354,10 @@ static int i40e_configure_rx_ring(struct i40e_ring *ring)
 	/* set the prefena field to 1 because the manual says to */
 	rx_ctx.prefena = 1;
 
+#ifdef DEV_NETMAP
+	i40e_netmap_preconfigure_rx_ring(ring, &rx_ctx);
+#endif /* DEV_NETMAP */
+
 	/* clear the context in the HMC */
 	err = i40e_clear_lan_rx_queue_context(hw, pf_q);
 	if (err) {
@@ -3373,6 +3385,11 @@ static int i40e_configure_rx_ring(struct i40e_ring *ring)
 	/* cache tail for quicker writes, and clear the reg before use */
 	ring->tail = hw->hw_addr + I40E_QRX_TAIL(pf_q);
 	writel(0, ring->tail);
+
+#ifdef DEV_NETMAP
+	if (i40e_netmap_configure_rx_ring(ring))
+		return 0;
+#endif /* DEV_NETMAP */
 
 	if (ring->xsk_pool) {
 		xsk_pool_set_rxq_info(ring->xsk_pool, &ring->xdp_rxq);
@@ -13291,6 +13308,11 @@ int i40e_vsi_release(struct i40e_vsi *vsi)
 		return -ENODEV;
 	}
 
+#ifdef DEV_NETMAP
+	if (vsi->netdev_registered)
+		netmap_detach(vsi->netdev);
+#endif
+
 	uplink_seid = vsi->uplink_seid;
 	if (vsi->type != I40E_VSI_SRIOV) {
 		if (vsi->netdev_registered) {
@@ -13656,6 +13678,12 @@ struct i40e_vsi *i40e_vsi_setup(struct i40e_pf *pf, u8 type,
 	    (vsi->type == I40E_VSI_VMDQ2)) {
 		ret = i40e_vsi_config_rss(vsi);
 	}
+
+#ifdef DEV_NETMAP
+	if (vsi->netdev_registered)
+		i40e_netmap_attach(vsi);
+#endif
+
 	return vsi;
 
 err_rings:
