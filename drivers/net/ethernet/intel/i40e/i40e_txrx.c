@@ -703,7 +703,7 @@ static bool i40e_clean_tx_irq(struct i40e_ring *tx_ring, int budget)
 	unsigned int total_bytes = 0;
 
 #ifdef DEV_NETMAP
-	if (netmap_tx_irq(tx_ring->netdev, tx_ring->queue_index) != NM_IRQ_PASS)
+	if (tx_ring->netdev && netmap_tx_irq(tx_ring->netdev, tx_ring->queue_index) != NM_IRQ_PASS)
 		return true;
 #endif /* DEV_NETMAP */
 
@@ -1532,6 +1532,15 @@ static int i40e_clean_rx_irq_ps(struct i40e_ring *rx_ring, int budget)
 	u32 rx_error, rx_status;
 	u8 rx_ptype;
 	u64 qword;
+
+#ifdef DEV_NETMAP
+	if (rx_ring->netdev) {
+		int dummy, nm_irq;
+		nm_irq = netmap_rx_irq(rx_ring->netdev, rx_ring->queue_index, &dummy);
+		if (nm_irq != NM_IRQ_PASS)
+			return (nm_irq == NM_IRQ_RESCHED) ? budget : 1;
+	}
+#endif /* DEV_NETMAP */
 
 	if (budget <= 0)
 		return 0;
