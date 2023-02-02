@@ -59,6 +59,9 @@ static void igc_configure_msix(struct igc_adapter *adapter);
 static bool igc_alloc_mapped_page(struct igc_ring *rx_ring,
 				  struct igc_rx_buffer *bi);
 #if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+static void igc_up(struct igc_adapter *adapter);
+static void igc_down(struct igc_adapter *adapter);
+static void igc_reset(struct igc_adapter *adapter);
 #include <if_igc_netmap.h>
 #endif
 
