@@ -60,6 +60,9 @@ static void igc_irq_enable(struct igc_adapter *adapter);
 static void igc_configure_msix(struct igc_adapter *adapter);
 static bool igc_alloc_mapped_page(struct igc_ring *rx_ring,
 				  struct igc_rx_buffer *bi);
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#include <if_igc_netmap.h>
+#endif
 
 enum latency_range {
 	lowest_latency = 0,
@@ -619,6 +622,9 @@ static void igc_configure_tx_ring(struct igc_adapter *adapter,
 
 	txdctl |= IGC_TXDCTL_QUEUE_ENABLE;
 	wr32(IGC_TXDCTL(reg_idx), txdctl);
+#ifdef DEV_NETMAP
+	igc_netmap_configure_tx_ring(adapter, reg_idx);
+#endif /* DEV_NETMAP */
 }
 
 /**
@@ -1400,6 +1406,11 @@ static void igc_alloc_rx_buffers(struct igc_ring *rx_ring, u16 cleaned_count)
 	struct igc_rx_buffer *bi;
 	u16 bufsz;
 
+#ifdef DEV_NETMAP
+	if (igc_netmap_configure_rx_ring(rx_ring))
+		return;
+#endif /* DEV_NETMAP */
+
 	/* nothing to do */
 	if (!cleaned_count)
 		return;
@@ -1464,6 +1475,11 @@ static int igc_clean_rx_irq(struct igc_q_vector *q_vector, const int budget)
 	struct igc_ring *rx_ring = q_vector->rx.ring;
 	struct sk_buff *skb = rx_ring->skb;
 	u16 cleaned_count = igc_desc_unused(rx_ring);
+
+#ifdef DEV_NETMAP
+	if (netmap_rx_irq(rx_ring->netdev, rx_ring->queue_index, &total_packets))
+		return true;
+#endif /* DEV_NETMAP */
 
 	while (likely(total_packets < budget)) {
 		union igc_adv_rx_desc *rx_desc;
@@ -1614,6 +1630,11 @@ static bool igc_clean_tx_irq(struct igc_q_vector *q_vector, int napi_budget)
 
 	if (test_bit(__IGC_DOWN, &adapter->state))
 		return true;
+
+#ifdef DEV_NETMAP
+	if (netmap_tx_irq(tx_ring->netdev, tx_ring->queue_index))
+		return true; /* cleaned ok */
+#endif /* DEV_NETMAP */
 
 	tx_buffer = &tx_ring->tx_buffer_info[i];
 	tx_desc = IGC_TX_DESC(tx_ring, i);
@@ -4181,6 +4202,10 @@ static int igc_probe(struct pci_dev *pdev,
 	/* Check if Media Autosense is enabled */
 	adapter->ei = *ei;
 
+#ifdef DEV_NETMAP
+	igc_netmap_attach(adapter);
+#endif /* DEV_NETMAP */
+
 	/* print pcie link status and MAC address */
 	pcie_print_link_status(pdev);
 	netdev_info(netdev, "MAC: %pM\n", netdev->dev_addr);
@@ -4232,6 +4257,11 @@ static void igc_remove(struct pci_dev *pdev)
 	 * would have already happened in close and is redundant.
 	 */
 	igc_release_hw_control(adapter);
+
+#ifdef DEV_NETMAP
+	netmap_detach(netdev);
+#endif /* DEV_NETMAP */
+
 	unregister_netdev(netdev);
 
 	igc_clear_interrupt_scheme(adapter);
