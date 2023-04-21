@@ -35,6 +35,11 @@ MODULE_PARM_DESC(debug, "netif level (0=none,...,16=all), hw debug_mask (0x8XXXX
 MODULE_PARM_DESC(debug, "netif level (0=none,...,16=all)");
 #endif /* !CONFIG_DYNAMIC_DEBUG */
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#define NETMAP_ICE_LIB
+#include <ice_netmap_linux.h>
+#endif
+
 static struct workqueue_struct *ice_wq;
 static const struct net_device_ops ice_netdev_safe_mode_ops;
 static const struct net_device_ops ice_netdev_ops;
@@ -4263,6 +4268,10 @@ ice_probe(struct pci_dev *pdev, const struct pci_device_id __always_unused *ent)
 probe_done:
 	/* ready to go, so clear down state bit */
 	clear_bit(__ICE_DOWN, pf->state);
+
+#ifdef DEV_NETMAP
+	ice_netmap_attach(pf);
+#endif
 	return 0;
 
 err_send_version_unroll:
@@ -4362,6 +4371,9 @@ static void ice_remove(struct pci_dev *pdev)
 	if (!pf)
 		return;
 
+#ifdef DEV_NETMAP
+	ice_netmap_detach(pf);
+#endif /* DEV_NETMAP */
 	for (i = 0; i < ICE_MAX_RESET_WAIT; i++) {
 		if (!ice_is_reset_in_progress(pf->state))
 			break;
