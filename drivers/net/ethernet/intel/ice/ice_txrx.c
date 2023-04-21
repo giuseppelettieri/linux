@@ -21,6 +21,10 @@
 #define FDIR_DESC_RXDID 0x40
 #define ICE_FDIR_CLEAN_DELAY 10
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#include <ice_netmap_linux.h>
+#endif
+
 /**
  * ice_prgm_fdir_fltr - Program a Flow Director filter
  * @vsi: VSI to send dummy packet
@@ -218,6 +222,10 @@ static bool ice_clean_tx_irq(struct ice_tx_ring *tx_ring, int napi_budget)
 	s16 i = tx_ring->next_to_clean;
 	struct ice_tx_desc *tx_desc;
 	struct ice_tx_buf *tx_buf;
+#ifdef DEV_NETMAP
+	if (tx_ring->netdev && netmap_tx_irq(tx_ring->netdev, tx_ring->q_index) != NM_IRQ_PASS)
+		return true;
+#endif /* DEV_NETMAP */
 
 	tx_buf = &tx_ring->tx_buf[i];
 	tx_desc = ICE_TX_DESC(tx_ring, i);
@@ -1103,6 +1111,16 @@ int ice_clean_rx_irq(struct ice_rx_ring *rx_ring, int budget)
 	struct bpf_prog *xdp_prog = NULL;
 	struct xdp_buff xdp;
 	bool failure;
+
+#ifdef DEV_NETMAP
+	if (rx_ring->netdev) {
+		int dummy, nm_irq;
+		nm_irq = netmap_rx_irq(rx_ring->netdev, rx_ring->q_index, &dummy);
+		if (nm_irq != NM_IRQ_PASS) {
+			return 1;
+		}
+	}
+#endif /* DEV_NETMAP */
 
 	/* Frame size depend on rx_ring setup when PAGE_SIZE=4K */
 #if (PAGE_SIZE < 8192)

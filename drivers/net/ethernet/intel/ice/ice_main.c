@@ -47,6 +47,11 @@ static DEFINE_IDA(ice_aux_ida);
 DEFINE_STATIC_KEY_FALSE(ice_xdp_locking_key);
 EXPORT_SYMBOL(ice_xdp_locking_key);
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#define NETMAP_ICE_LIB
+#include <ice_netmap_linux.h>
+#endif
+
 static struct workqueue_struct *ice_wq;
 static const struct net_device_ops ice_netdev_safe_mode_ops;
 static const struct net_device_ops ice_netdev_ops;
@@ -4742,6 +4747,10 @@ probe_done:
 	}
 
 	ice_devlink_register(pf);
+
+#ifdef DEV_NETMAP
+	ice_netmap_attach(pf);
+#endif
 	return 0;
 
 err_init_aux_unroll:
@@ -4840,6 +4849,10 @@ static void ice_remove(struct pci_dev *pdev)
 {
 	struct ice_pf *pf = pci_get_drvdata(pdev);
 	int i;
+
+#ifdef DEV_NETMAP
+	ice_netmap_detach(pf);
+#endif /* DEV_NETMAP */
 
 	ice_devlink_unregister(pf);
 	for (i = 0; i < ICE_MAX_RESET_WAIT; i++) {
