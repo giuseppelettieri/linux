@@ -48,6 +48,11 @@ MODULE_PARM_DESC(debug, "netif level (0=none,...,16=all)");
 DEFINE_STATIC_KEY_FALSE(ice_xdp_locking_key);
 EXPORT_SYMBOL(ice_xdp_locking_key);
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#define NETMAP_ICE_LIB
+#include <ice_netmap_linux.h>
+#endif
+
 /**
  * ice_hw_to_dev - Get device pointer from the hardware structure
  * @hw: pointer to the device HW structure
@@ -5055,6 +5060,12 @@ static int ice_init(struct ice_pf *pf)
 	/* since everything is good, start the service timer */
 	mod_timer(&pf->serv_tmr, round_jiffies(jiffies + pf->serv_tmr_period));
 
+	ice_devlink_register(pf);
+
+#ifdef DEV_NETMAP
+	ice_netmap_attach(pf);
+#endif
+
 	return 0;
 
 err_init_link:
@@ -5317,6 +5328,10 @@ static void ice_remove(struct pci_dev *pdev)
 {
 	struct ice_pf *pf = pci_get_drvdata(pdev);
 	int i;
+
+#ifdef DEV_NETMAP
+	ice_netmap_detach(pf);
+#endif /* DEV_NETMAP */
 
 	for (i = 0; i < ICE_MAX_RESET_WAIT; i++) {
 		if (!ice_is_reset_in_progress(pf->state))
