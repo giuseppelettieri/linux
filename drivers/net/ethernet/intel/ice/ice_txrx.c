@@ -15,6 +15,10 @@
 
 #define ICE_RX_HDR_SIZE		256
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#include <ice_netmap_linux.h>
+#endif
+
 /**
  * ice_unmap_and_free_tx_buf - Release a Tx buffer
  * @ring: the ring that owns the buffer
@@ -122,6 +126,10 @@ static bool ice_clean_tx_irq(struct ice_ring *tx_ring, int napi_budget)
 	s16 i = tx_ring->next_to_clean;
 	struct ice_tx_desc *tx_desc;
 	struct ice_tx_buf *tx_buf;
+#ifdef DEV_NETMAP
+	if (tx_ring->netdev && netmap_tx_irq(tx_ring->netdev, tx_ring->q_index) != NM_IRQ_PASS)
+		return true;
+#endif /* DEV_NETMAP */
 
 	tx_buf = &tx_ring->tx_buf[i];
 	tx_desc = ICE_TX_DESC(tx_ring, i);
@@ -991,6 +999,16 @@ static int ice_clean_rx_irq(struct ice_ring *rx_ring, int budget)
 	bool failure;
 
 	xdp.rxq = &rx_ring->xdp_rxq;
+
+#ifdef DEV_NETMAP
+	if (rx_ring->netdev) {
+		int dummy, nm_irq;
+		nm_irq = netmap_rx_irq(rx_ring->netdev, rx_ring->q_index, &dummy);
+		if (nm_irq != NM_IRQ_PASS) {
+			return 1;
+		}
+	}
+#endif /* DEV_NETMAP */
 
 	/* start the loop to process Rx packets bounded by 'budget' */
 	while (likely(total_rx_pkts < (unsigned int)budget)) {

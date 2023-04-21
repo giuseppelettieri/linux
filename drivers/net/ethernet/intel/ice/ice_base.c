@@ -3,6 +3,10 @@
 
 #include "ice_base.h"
 #include "ice_dcb_lib.h"
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#define NETMAP_ICE_BASE
+#include <ice_netmap_linux.h>
+#endif
 
 /**
  * __ice_vsi_get_qs_contig - Assign a contiguous chunk of queues to VSI
@@ -396,6 +400,10 @@ int ice_setup_rx_ctx(struct ice_ring *ring)
 		wr32(hw, QRXFLXP_CNTXT(pf_q), regval);
 	}
 
+#ifdef DEV_NETMAP
+	ice_netmap_preconfigure_rx_ring(ring, &rlan_ctx);
+#endif /* DEV_NETMAP */
+
 	/* Absolute queue number out of 2K needs to be passed */
 	err = ice_write_rxq_ctx(hw, &rlan_ctx, pf_q);
 	if (err) {
@@ -417,6 +425,11 @@ int ice_setup_rx_ctx(struct ice_ring *ring)
 	/* init queue specific tail register */
 	ring->tail = hw->hw_addr + QRX_TAIL(pf_q);
 	writel(0, ring->tail);
+
+#ifdef DEV_NETMAP
+	if (ice_netmap_configure_rx_ring(ring))
+		return 0;
+#endif /* DEV_NETMAP */
 
 	err = ring->xsk_umem ?
 	      ice_alloc_rx_bufs_slow_zc(ring, ICE_DESC_UNUSED(ring)) :
@@ -655,6 +668,10 @@ ice_vsi_cfg_txq(struct ice_vsi *vsi, struct ice_ring *ring,
 	txq = &qg_buf->txqs[0];
 	if (pf_q == le16_to_cpu(txq->txq_id))
 		ring->txq_teid = le32_to_cpu(txq->q_teid);
+
+#ifdef DEV_NETMAP
+	ice_netmap_configure_tx_ring(ring);
+#endif /* DEV_NETMAP */
 
 	return 0;
 }
