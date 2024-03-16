@@ -2212,7 +2212,7 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 	int nm_irq = netmap_rx_irq(vi->dev, vq2rxq(rq->vq), &work_done);
 
 	if (nm_irq == NM_IRQ_COMPLETED) {
-		napi_complete(napi);
+		nm_napi_complete(napi);
                 return 1;
         } else if (nm_irq == NM_IRQ_RESCHED) {
 		return budget;
